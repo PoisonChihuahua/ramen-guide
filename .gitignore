@@ -1,0 +1,23 @@
+# --- OS / Editor ---
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# --- Node / Frontend ---
+node_modules/
+dist/
+dist-ssr/
+*.local
+*.log
+
+# --- .NET / Backend ---
+bin/
+obj/
+*.db
+*.db-shm
+*.db-wal
+appsettings.Production.json
+
+# --- Claude ---
+.claude/
