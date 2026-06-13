@@ -4,20 +4,44 @@ import type { Shop } from '../types';
 export function ShopCard({ shop }: { shop: Shop }) {
   return (
     <Link to={`/shops/${shop.id}`} className="shop-card">
-      <img
-        src={shop.imageUrl}
-        alt={shop.name}
-        className="shop-card-image"
-        loading="lazy"
-      />
-      <div className="shop-card-body">
-        <h3 className="shop-card-name">{shop.name}</h3>
-        <div className="shop-card-tags">
-          <span className="tag tag-genre">{shop.genre}</span>
-          <span className="tag tag-area">{shop.area}</span>
+      <div className="shop-card__media">
+        <img
+          className="media-img"
+          src={shop.imageUrl}
+          alt={shop.name}
+          loading="lazy"
+        />
+        <span className="shop-card__area-flag">{shop.area}</span>
+      </div>
+      <div className="shop-card__body">
+        <div className="shop-card__tags">
+          <span className="tag tag--genre">{shop.genre}</span>
+          <span className="tag tag--area">{shop.area}</span>
         </div>
-        <p className="shop-card-desc">{shop.description}</p>
-        <p className="shop-card-price">{shop.priceRange}</p>
+        <h3 className="shop-card__name">{shop.name}</h3>
+        <p className="shop-card__desc">{shop.description}</p>
+        <div className="shop-card__foot">
+          <span className="shop-card__price">
+            <small>価格帯</small>
+            {shop.priceRange}
+          </span>
+          <span className="shop-card__more">
+            詳しく見る
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3 7h8M7.5 3.5L11 7l-3.5 3.5" />
+            </svg>
+          </span>
+        </div>
       </div>
     </Link>
   );

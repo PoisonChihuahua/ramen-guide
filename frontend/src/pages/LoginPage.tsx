@@ -28,35 +28,46 @@ export function LoginPage() {
   }
 
   return (
-    <div className="auth-page">
-      <h1>ログイン</h1>
-      <form className="auth-form" onSubmit={handleSubmit}>
-        {error && <p className="state-error">{error}</p>}
-        <label>
-          メールアドレス
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </label>
-        <label>
-          パスワード
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-        </label>
-        <button type="submit" disabled={submitting}>
-          {submitting ? '送信中...' : 'ログイン'}
-        </button>
-      </form>
-      <p className="auth-switch">
-        アカウントをお持ちでない方は <Link to="/register">新規登録</Link>
-      </p>
-    </div>
+    <main className="auth-page">
+      <div className="auth-card">
+        <h1 className="auth-title">ログイン</h1>
+        <p className="auth-sub">ラーメン図鑑へおかえりなさい。</p>
+        <form className="auth-form" onSubmit={handleSubmit}>
+          {error && <p className="form-error">{error}</p>}
+          <div className="form-group">
+            <label className="form-label" htmlFor="login-email">
+              メールアドレス
+            </label>
+            <input
+              id="login-email"
+              className="form-input"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="login-password">
+              パスワード
+            </label>
+            <input
+              id="login-password"
+              className="form-input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+          <button className="auth-button" type="submit" disabled={submitting}>
+            {submitting ? '送信中...' : 'ログイン'}
+          </button>
+        </form>
+        <p className="auth-switch">
+          アカウントをお持ちでない方は <Link to="/register">新規登録</Link>
+        </p>
+      </div>
+    </main>
   );
 }
