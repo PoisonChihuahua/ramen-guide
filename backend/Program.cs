@@ -85,3 +85,6 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+// 統合テスト（WebApplicationFactory<Program>）からエントリポイントを参照するために公開する。
+public partial class Program { }
