@@ -5,7 +5,18 @@ namespace RamenSite.Api.Services;
 /// <summary>
 /// 認証トークンを格納する httpOnly Cookie の名前と属性を一元管理する。
 /// localStorage ではなく httpOnly Cookie に保存することで、JavaScript からトークンを
-/// 読み取れなくし（XSS によるトークン窃取を防止）、SameSite=Strict で CSRF を抑止する。
+/// 読み取れなくする（XSS によるトークン窃取を防止）。
+///
+/// SameSite 属性は接続スキームで切り替える:
+/// - 本番（HTTPS）: フロントエンド（例 *.insforge.app）とバックエンド（例 *.fly.dev）が
+///   別サイトになるため、クロスサイトでも Cookie を送信できるよう SameSite=None を使う
+///   （None は Secure とセットが必須）。
+/// - ローカル開発（HTTP）: None+Secure が使えないため SameSite=Lax にフォールバックする。
+///
+/// 注意: SameSite=None は SameSite ベースの CSRF 防御を失う。CORS は許可 Origin を本番ドメインに
+/// 限定しているが、書き込みリクエストの CSRF 対策としては別途トークン方式等の導入を検討すること。
+/// フロント／バックを同一サイト（同一登録ドメインのサブドメイン）に置けば SameSite=Lax で
+/// 防御を維持できる。
 /// </summary>
 public static class AuthCookie
 {
@@ -29,7 +40,8 @@ public static class AuthCookie
     {
         HttpOnly = true,           // JavaScript からアクセス不可（XSS 対策）
         Secure = isHttps,          // 本番（HTTPS）では Secure。dev の http では送信できるよう false。
-        SameSite = SameSiteMode.Strict, // クロスサイトリクエストでは送信しない（CSRF 対策）
+        // 本番（HTTPS）はクロスサイトでも送るため None、ローカル http は None 不可のため Lax。
+        SameSite = isHttps ? SameSiteMode.None : SameSiteMode.Lax,
         Path = "/",
         Expires = expires,
     };

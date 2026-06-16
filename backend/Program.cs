@@ -36,10 +36,13 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Clear();
 });
 
-// SQLite + EF Core
+// PostgreSQL + EF Core。接続文字列は ConnectionStrings__DefaultConnection（環境変数）から注入する。
+// 本番では InsForge マネージド Postgres の接続文字列を Compute の env/secret で渡す。
+// 統合テストはこの登録を取り除き、インメモリ SQLite に差し替える（RamenApiFactory 参照）。
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")
-                      ?? "Data Source=ramensite.db"));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")
+                      ?? throw new InvalidOperationException(
+                          "ConnectionStrings:DefaultConnection が未設定です。環境変数で Postgres 接続文字列を設定してください。")));
 
 // パスワードハッシュ（ASP.NET Core 組み込み）
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
@@ -163,7 +166,19 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
+
+    // 本番（Npgsql）はマイグレーションを適用してスキーマをバージョン管理する。
+    // 統合テストは SQLite（リレーショナルだが Npgsql 用マイグレーション SQL は適用できない）に
+    // 差し替わるため、モデルから直接スキーマを生成する EnsureCreated にフォールバックする。
+    if (db.Database.IsNpgsql())
+    {
+        db.Database.Migrate();
+    }
+    else
+    {
+        db.Database.EnsureCreated();
+    }
+
     SeedData.Initialize(db, app.Environment.IsDevelopment());
 }
 
