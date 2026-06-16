@@ -72,7 +72,7 @@ jobs:
 
       - name: Login & link InsForge project
         run: |
-          npx @insforge/cli login --email -y
+          npx @insforge/cli login --email --json
           npx @insforge/cli link --project-id "$INSFORGE_PROJECT_ID" --org-id "$INSFORGE_ORG_ID" -y
 
       # Compute の暗号化 env を再現する .env ファイルを secrets から生成する。
@@ -126,7 +126,7 @@ jobs:
 
       - name: Login & link InsForge project
         run: |
-          npx @insforge/cli login --email -y
+          npx @insforge/cli login --email --json
           npx @insforge/cli link --project-id "$INSFORGE_PROJECT_ID" --org-id "$INSFORGE_ORG_ID" -y
 
       - name: Deploy to InsForge Deployments
