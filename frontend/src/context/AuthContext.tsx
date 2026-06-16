@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { AuthContext } from './auth-context';
 import type { User } from '../types';
 import * as authApi from '../api/auth';
+import { AUTH_EXPIRED_EVENT } from '../api/client';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -15,6 +16,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(setUser)
       .catch(() => setUser(null))
       .finally(() => setIsLoading(false));
+  }, []);
+
+  // API クライアントがセッション失効を検知したら、ログイン状態を破棄する。
+  // これにより、どの画面で 401 が継続してもログイン済み表示のまま固まらない。
+  useEffect(() => {
+    function handleAuthExpired() {
+      setUser(null);
+    }
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {

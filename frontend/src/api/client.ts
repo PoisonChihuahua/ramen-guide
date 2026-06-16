@@ -23,6 +23,18 @@ const NO_REFRESH_PATHS = [
   '/api/auth/logout',
 ];
 
+/**
+ * 認証セッションが失効した（リフレッシュ不能 or 再試行後も 401）ことを
+ * アプリ全体へ通知するためのイベント名。AuthProvider が購読しユーザー状態を破棄する。
+ */
+export const AUTH_EXPIRED_EVENT = 'ramensite:auth-expired';
+
+function notifyAuthExpired(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+  }
+}
+
 // 同時に複数の 401 が起きてもリフレッシュ要求は1回に集約する（single-flight）。
 let refreshPromise: Promise<boolean> | null = null;
 
@@ -75,11 +87,20 @@ export async function apiFetch<T>(
 
   let response = await sendRequest();
 
+  // クエリ文字列や動的セグメントを除いた純粋なパスで判定する。
+  const pathname = path.split('?')[0];
+
   // アクセストークンが失効していたら、一度だけリフレッシュして再試行する。
-  if (response.status === 401 && !NO_REFRESH_PATHS.includes(path)) {
+  if (response.status === 401 && !NO_REFRESH_PATHS.includes(pathname)) {
     const refreshed = await refreshSession();
     if (refreshed) {
       response = await sendRequest();
+    }
+
+    // リフレッシュ不能、または再試行後も 401 ならセッションは失効している。
+    // アプリ全体へ通知し、ログイン済み状態のままエラーが出続けるのを防ぐ。
+    if (!refreshed || response.status === 401) {
+      notifyAuthExpired();
     }
   }
 

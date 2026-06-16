@@ -11,7 +11,7 @@ import type { User } from '../types';
 vi.mock('../api/auth');
 const mockedAuthApi = vi.mocked(authApi);
 
-const user: User = { id: 1, email: 'taro@example.com', displayName: '太郎' };
+const user: User = { id: 1, email: 'taro@example.com', displayName: '太郎', role: 'User' };
 
 function Consumer() {
   const { user, isLoading, login, register, logout } = useAuth();

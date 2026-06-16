@@ -132,6 +132,29 @@ public class RefreshTokenApiTests : IClassFixture<RamenApiFactory>
     }
 
     [Fact]
+    public async Task Refresh_ReusingRotatedToken_RevokesEntireTokenFamily()
+    {
+        var (_, refresh1) = await RegisterAsync("rt-reuse@example.com");
+
+        // 正常なローテーション: refresh1 → refresh2（refresh2 はこの時点では有効）
+        var rotate = await _client.SendAsync(
+            Post("/api/auth/refresh", $"{RefreshCookieName}={refresh1}"));
+        rotate.StatusCode.Should().Be(HttpStatusCode.OK);
+        var refresh2 = ExtractCookie(rotate, RefreshCookieName);
+        refresh2.Should().NotBeNullOrWhiteSpace();
+
+        // 盗用シナリオ: 失効済みの refresh1 を再提示 → 拒否され、ファミリー全体が失効する
+        var reuse = await _client.SendAsync(
+            Post("/api/auth/refresh", $"{RefreshCookieName}={refresh1}"));
+        reuse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        // 盗用検知により、有効だったはずの refresh2 も無効化されている
+        var afterReuse = await _client.SendAsync(
+            Post("/api/auth/refresh", $"{RefreshCookieName}={refresh2}"));
+        afterReuse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
     public async Task Refresh_WithoutCookie_ReturnsUnauthorized()
     {
         var response = await _client.SendAsync(Post("/api/auth/refresh"));
