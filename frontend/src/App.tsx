@@ -11,6 +11,8 @@ import { AboutPage } from './pages/AboutPage';
 import { ContactPage } from './pages/ContactPage';
 import { TermsPage } from './pages/TermsPage';
 import { MyPage } from './pages/MyPage';
+import { AdminShopListPage } from './pages/AdminShopListPage';
+import { AdminShopFormPage } from './pages/AdminShopFormPage';
 
 function App() {
   return (
@@ -18,7 +20,6 @@ function App() {
       <Route element={<Layout />}>
         <Route index element={<ShopListPage />} />
         <Route path="shops/:id" element={<ShopDetailPage />} />
-        <Route path="favorites" element={<FavoritesPage />} />
         <Route path="about" element={<AboutPage />} />
         <Route path="contact" element={<ContactPage />} />
         <Route path="terms" element={<TermsPage />} />
@@ -32,6 +33,14 @@ function App() {
         {/* ログイン必須 */}
         <Route element={<ProtectedRoute />}>
           <Route path="mypage" element={<MyPage />} />
+          <Route path="favorites" element={<FavoritesPage />} />
+        </Route>
+
+        {/* 管理者専用 */}
+        <Route element={<ProtectedRoute requireAdmin />}>
+          <Route path="admin" element={<AdminShopListPage />} />
+          <Route path="admin/shops/new" element={<AdminShopFormPage />} />
+          <Route path="admin/shops/:id/edit" element={<AdminShopFormPage />} />
         </Route>
       </Route>
     </Routes>

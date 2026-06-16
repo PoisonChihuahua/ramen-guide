@@ -19,14 +19,19 @@ export function Layout() {
             <Link className="nav-link" to="/">
               店舗一覧
             </Link>
-            <Link className="nav-link" to="/favorites">
-              お気に入り
-            </Link>
             {user ? (
               <>
+                <Link className="nav-link" to="/favorites">
+                  お気に入り
+                </Link>
                 <Link className="nav-link" to="/mypage">
                   マイページ
                 </Link>
+                {user.role === 'Admin' && (
+                  <Link className="nav-link" to="/admin">
+                    店舗管理
+                  </Link>
+                )}
                 <span className="nav-greeting">{user.displayName} さん</span>
                 <button className="nav-link" type="button" onClick={logout}>
                   ログアウト

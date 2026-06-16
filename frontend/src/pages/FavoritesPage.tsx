@@ -1,24 +1,18 @@
-import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { fetchShops } from '../api/shops';
+import { useQuery } from '@tanstack/react-query';
+import { fetchFavorites } from '../api/favorites';
 import { ShopCard } from '../components/ShopCard';
-import { useFavorites } from '../hooks/useFavorites';
 
+/** ログインユーザーのお気に入り店舗一覧（サーバー保存・ユーザー単位）。 */
 export function FavoritesPage() {
-  const { favoriteIds } = useFavorites();
-
   const {
     data: shops,
     isLoading,
     isError,
   } = useQuery({
-    queryKey: ['shops', {}],
-    queryFn: () => fetchShops(),
+    queryKey: ['favorites'],
+    queryFn: fetchFavorites,
   });
-
-  const favoriteShops = (shops ?? []).filter((shop) =>
-    favoriteIds.includes(shop.id),
-  );
 
   return (
     <main className="shop-list-page">
@@ -28,28 +22,28 @@ export function FavoritesPage() {
             <h2 className="section-title">お気に入り</h2>
             <p className="section-sub">Favorites</p>
           </div>
-          {shops && <p className="section-count">全 {favoriteShops.length} 店舗</p>}
+          {shops && <p className="section-count">全 {shops.length} 店舗</p>}
         </div>
 
         {isLoading && <p className="state-message">読み込み中...</p>}
         {isError && (
           <p className="state-message state-error">
-            店舗情報の取得に失敗しました。
+            お気に入りの取得に失敗しました。
           </p>
         )}
-        {!isLoading && !isError && favoriteShops.length === 0 && (
+        {shops && shops.length === 0 && (
           <p className="state-message">
-            お気に入りに登録した店舗はまだありません。
-            <br />
+            まだお気に入りがありません。気になるお店を{' '}
             <Link to="/" className="back-link">
-              店舗一覧から探す
-            </Link>
+              一覧
+            </Link>{' '}
+            から登録してみましょう。
           </p>
         )}
 
-        {favoriteShops.length > 0 && (
+        {shops && shops.length > 0 && (
           <div className="shop-grid">
-            {favoriteShops.map((shop) => (
+            {shops.map((shop) => (
               <ShopCard key={shop.id} shop={shop} />
             ))}
           </div>

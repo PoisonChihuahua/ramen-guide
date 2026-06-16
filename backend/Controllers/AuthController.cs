@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -135,21 +134,19 @@ public class AuthController : ControllerBase
     [HttpGet("me")]
     public async Task<ActionResult<UserDto>> Me()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)
-                     ?? User.FindFirstValue("sub");
-
-        if (!int.TryParse(userId, out var id))
+        var id = User.GetUserId();
+        if (id is null)
         {
             return Unauthorized();
         }
 
-        var user = await _db.Users.FindAsync(id);
+        var user = await _db.Users.FindAsync(id.Value);
         if (user is null)
         {
             return Unauthorized();
         }
 
-        return Ok(new UserDto(user.Id, user.Email, user.DisplayName));
+        return Ok(new UserDto(user.Id, user.Email, user.DisplayName, user.Role));
     }
 
     /// <summary>
@@ -178,6 +175,6 @@ public class AuthController : ControllerBase
         Response.Cookies.Append(
             AuthCookie.RefreshName, refreshToken, AuthCookie.BuildSetOptions(Request.IsHttps, refreshExpires));
 
-        return new UserDto(user.Id, user.Email, user.DisplayName);
+        return new UserDto(user.Id, user.Email, user.DisplayName, user.Role);
     }
 }

@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { StarRating } from './StarRating';
 import type { Shop } from '../types';
 
 export function ShopCard({ shop }: { shop: Shop }) {
@@ -19,6 +20,15 @@ export function ShopCard({ shop }: { shop: Shop }) {
           <span className="tag tag--area">{shop.area}</span>
         </div>
         <h3 className="shop-card__name">{shop.name}</h3>
+        {shop.reviewCount > 0 && (
+          <div className="shop-card__rating">
+            <StarRating
+              value={shop.averageRating}
+              count={shop.reviewCount}
+              size="sm"
+            />
+          </div>
+        )}
         <p className="shop-card__desc">{shop.description}</p>
         <div className="shop-card__foot">
           <span className="shop-card__price">

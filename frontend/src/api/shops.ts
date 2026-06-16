@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import type { Shop, ShopFilters } from '../types';
+import type { Shop, ShopFilters, ShopInput } from '../types';
 
 export function fetchShops(filters: ShopFilters = {}): Promise<Shop[]> {
   const params = new URLSearchParams();
@@ -13,4 +13,27 @@ export function fetchShops(filters: ShopFilters = {}): Promise<Shop[]> {
 
 export function fetchShop(id: number): Promise<Shop> {
   return apiFetch<Shop>(`/api/shops/${id}`);
+}
+
+/** 店舗を新規登録（管理者のみ）。 */
+export function createShop(input: ShopInput): Promise<Shop> {
+  return apiFetch<Shop>('/api/shops', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+/** 店舗情報を更新（管理者のみ）。 */
+export function updateShop(id: number, input: ShopInput): Promise<Shop> {
+  return apiFetch<Shop>(`/api/shops/${id}`, {
+    method: 'PUT',
+    body: input,
+  });
+}
+
+/** 店舗を削除（管理者のみ）。 */
+export function deleteShop(id: number): Promise<void> {
+  return apiFetch<void>(`/api/shops/${id}`, {
+    method: 'DELETE',
+  });
 }
