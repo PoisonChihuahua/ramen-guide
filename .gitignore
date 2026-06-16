@@ -18,6 +18,10 @@ obj/
 *.db-shm
 *.db-wal
 appsettings.Production.json
+TestResults/
+
+# --- Frontend coverage ---
+frontend/coverage/
 
 # --- TLS 証明書（プロキシで生成 or ホスト配置した場合の保険。鍵をコミットしない） ---
 proxy/certs/

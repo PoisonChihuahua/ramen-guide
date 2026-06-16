@@ -122,6 +122,25 @@ public class ReviewsApiTests : IClassFixture<RamenApiFactory>
         shop!.ReviewCount.Should().BeGreaterThanOrEqualTo(1);
         shop.AverageRating.Should().BeGreaterThan(0);
     }
+
+    [Fact]
+    public async Task DeleteReview_WithoutExistingReview_ReturnsNotFound()
+    {
+        var token = await _client.RegisterAndGetTokenAsync("reviewer5@example.com");
+
+        // レビューを投稿せずに削除を試みる
+        var delete = await _client.SendWithTokenAsync(HttpMethod.Delete, "/api/shops/1/reviews", token);
+
+        delete.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task DeleteReview_WithoutAuth_ReturnsUnauthorized()
+    {
+        var response = await _client.DeleteAsync("/api/shops/1/reviews");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
 }
 
 /// <summary>レビュー API レスポンス DTO。</summary>
