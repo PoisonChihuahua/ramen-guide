@@ -1,0 +1,135 @@
+name: Deploy to InsForge
+
+# main へマージ（push）されるたびに InsForge へ自動デプロイする。
+# 手動実行（workflow_dispatch）も可能。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 同時デプロイを防ぐ（前のデプロイ完了を待ってから次を流す）。
+concurrency:
+  group: deploy-insforge
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # CLI を非対話で動かすための共通設定。各 job で login / link に使う。
+  INSFORGE_EMAIL: ${{ secrets.INSFORGE_EMAIL }}
+  INSFORGE_PASSWORD: ${{ secrets.INSFORGE_PASSWORD }}
+  INSFORGE_PROJECT_ID: ${{ secrets.INSFORGE_PROJECT_ID }}
+  INSFORGE_ORG_ID: ${{ secrets.INSFORGE_ORG_ID }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1) 検証: ビルド & テストが通らない変更はデプロイしない。
+  # ---------------------------------------------------------------------------
+  verify:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- フロントエンド (Vite + Vitest) ---
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Frontend install / build / test
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+          npm run test
+
+      # --- バックエンド (.NET 10 + xUnit) ---
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Backend test
+        run: dotnet test tests/RamenSite.Api.Tests/RamenSite.Api.Tests.csproj -c Release
+
+  # ---------------------------------------------------------------------------
+  # 2) バックエンド: InsForge Compute (Fly.io, source モード) へデプロイ。
+  #    DB マイグレーションは起動時に Program.cs が自動適用する。
+  # ---------------------------------------------------------------------------
+  deploy-backend:
+    name: Deploy backend (Compute)
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # source モードのリモートビルドに flyctl が必要（Docker デーモンは不要）。
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Login & link InsForge project
+        run: |
+          npx @insforge/cli login --email -y
+          npx @insforge/cli link --project-id "$INSFORGE_PROJECT_ID" --org-id "$INSFORGE_ORG_ID" -y
+
+      # Compute の暗号化 env を再現する .env ファイルを secrets から生成する。
+      # キーは全大文字必須（ASP.NET の Config は大小無視で解決する）。
+      # 値はシェル環境変数経由で書き出し、`;`・`=`・空白を含む接続文字列でも壊れないようにする。
+      - name: Write backend env file
+        env:
+          CONNECTIONSTRINGS__DEFAULTCONNECTION: ${{ secrets.BACKEND_DB_CONNECTION_STRING }}
+          JWT__KEY: ${{ secrets.BACKEND_JWT_KEY }}
+          SEED_ADMIN_EMAIL: ${{ secrets.SEED_ADMIN_EMAIL }}
+          SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
+          CORS__ALLOWEDORIGINS__0: ${{ vars.FRONTEND_PUBLIC_URL }}
+        run: |
+          {
+            echo "ASPNETCORE_ENVIRONMENT=Production"
+            echo "CONNECTIONSTRINGS__DEFAULTCONNECTION=$CONNECTIONSTRINGS__DEFAULTCONNECTION"
+            echo "JWT__KEY=$JWT__KEY"
+            # Issuer/Audience は appsettings に無いため env 必須。非機微の固定値。
+            echo "JWT__ISSUER=RamenSite"
+            echo "JWT__AUDIENCE=RamenSiteClient"
+            echo "SEED_ADMIN_EMAIL=$SEED_ADMIN_EMAIL"
+            echo "SEED_ADMIN_PASSWORD=$SEED_ADMIN_PASSWORD"
+            echo "CORS__ALLOWEDORIGINS__0=$CORS__ALLOWEDORIGINS__0"
+          } > backend.env.production
+
+      - name: Deploy to InsForge Compute
+        run: |
+          npx @insforge/cli compute deploy backend \
+            --name ramen-api \
+            --port 8080 \
+            --env-file backend.env.production
+
+      - name: Remove env file
+        if: always()
+        run: rm -f backend.env.production
+
+  # ---------------------------------------------------------------------------
+  # 3) フロントエンド: InsForge Deployments (Vercel) へデプロイ。
+  #    ビルドはサーバ側で走るため、API のベース URL を build-time env で渡す。
+  # ---------------------------------------------------------------------------
+  deploy-frontend:
+    name: Deploy frontend (Deployments)
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Login & link InsForge project
+        run: |
+          npx @insforge/cli login --email -y
+          npx @insforge/cli link --project-id "$INSFORGE_PROJECT_ID" --org-id "$INSFORGE_ORG_ID" -y
+
+      - name: Deploy to InsForge Deployments
+        run: |
+          npx @insforge/cli deployments deploy frontend \
+            --env "{\"VITE_API_BASE_URL\": \"${{ vars.BACKEND_PUBLIC_URL }}\"}"
