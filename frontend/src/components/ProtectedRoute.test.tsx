@@ -57,7 +57,7 @@ describe('ProtectedRoute', () => {
   it('ログイン済みなら保護されたページを描画する', () => {
     mockedUseAuth.mockReturnValue(
       baseAuth({
-        user: { id: 1, email: 'a@example.com', displayName: '太郎' },
+        user: { id: 1, email: 'a@example.com', displayName: '太郎', role: 'User' },
         isLoading: false,
       }),
     );

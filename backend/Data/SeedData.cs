@@ -6,9 +6,9 @@ namespace RamenSite.Api.Data;
 /// <summary>初回起動時にサンプルのラーメン店データと管理者ユーザーを投入する。</summary>
 public static class SeedData
 {
-    public static void Initialize(AppDbContext db)
+    public static void Initialize(AppDbContext db, bool isDevelopment)
     {
-        SeedAdminUser(db);
+        SeedAdminUser(db, isDevelopment);
 
         if (db.Shops.Any())
         {
@@ -99,10 +99,12 @@ public static class SeedData
     }
 
     /// <summary>
-    /// 管理者ユーザーを投入する。資格情報は環境変数で上書き可能（本番では必ず変更すること）。
-    /// SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD。未指定時はローカル開発用の既定値。
+    /// 管理者ユーザーを投入する。資格情報は環境変数で上書きする。
+    /// SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD。
+    /// 本番では既定値での起動を許可せず、未設定なら例外で起動を中断する
+    /// （既定の管理者資格情報による乗っ取りを防ぐため）。開発時のみ既定値を使う。
     /// </summary>
-    private static void SeedAdminUser(AppDbContext db)
+    private static void SeedAdminUser(AppDbContext db, bool isDevelopment)
     {
         var email = (Environment.GetEnvironmentVariable("SEED_ADMIN_EMAIL")
                      ?? "admin@ramen.test").Trim().ToLowerInvariant();
@@ -112,8 +114,18 @@ public static class SeedData
             return;
         }
 
-        var password = Environment.GetEnvironmentVariable("SEED_ADMIN_PASSWORD")
-                       ?? "adminpass123";
+        var password = Environment.GetEnvironmentVariable("SEED_ADMIN_PASSWORD");
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            if (!isDevelopment)
+            {
+                throw new InvalidOperationException(
+                    "本番環境では SEED_ADMIN_PASSWORD（および推奨で SEED_ADMIN_EMAIL）を設定してください。" +
+                    "既定の管理者資格情報での起動は許可されていません。");
+            }
+
+            password = "adminpass123"; // ローカル開発専用の既定値
+        }
 
         var admin = new User
         {

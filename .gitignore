@@ -21,3 +21,6 @@ appsettings.Production.json
 
 # --- Claude ---
 .claude/
+
+# --- Conductor (machine-local workspace metadata / symlinks) ---
+.conductor/

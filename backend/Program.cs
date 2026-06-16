@@ -122,11 +122,19 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
-// フロントエンド (Vite dev) からのアクセスを許可
+// フロントエンドからのアクセスを許可。許可 Origin は設定（Cors:AllowedOrigins）から注入し、
+// 本番では環境変数 Cors__AllowedOrigins__0 などで本番ドメインを明示する。
+// 未設定時はローカル開発用の Vite dev サーバーにフォールバックする。
+var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+if (corsOrigins is null || corsOrigins.Length == 0)
+{
+    corsOrigins = ["http://localhost:5173", "http://localhost:5174"];
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(FrontendCorsPolicy, policy =>
-        policy.WithOrigins("http://localhost:5173", "http://localhost:5174")
+        policy.WithOrigins(corsOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials()); // httpOnly Cookie を跨いで送受信するために必須
@@ -139,7 +147,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
-    SeedData.Initialize(db);
+    SeedData.Initialize(db, app.Environment.IsDevelopment());
 }
 
 // --- HTTP pipeline ---

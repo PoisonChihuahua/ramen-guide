@@ -17,8 +17,11 @@ public class TokenService
         _settings = settings.Value;
     }
 
-    /// <summary>リフレッシュトークンの有効日数。</summary>
+    /// <summary>リフレッシュトークンの有効日数（スライド期限）。</summary>
     public int RefreshTokenDays => _settings.RefreshTokenDays;
+
+    /// <summary>リフレッシュトークンファミリーの絶対有効日数（ローテーションで延長されない上限）。</summary>
+    public int RefreshTokenAbsoluteDays => _settings.RefreshTokenAbsoluteDays;
 
     public string CreateToken(User user)
     {

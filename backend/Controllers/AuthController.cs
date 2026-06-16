@@ -97,15 +97,47 @@ public class AuthController : ControllerBase
             .Include(t => t.User)
             .FirstOrDefaultAsync(t => t.TokenHash == hash);
 
-        if (stored is null || !stored.IsActive)
+        if (stored is null)
+        {
+            return Unauthorized(new { message = "リフレッシュトークンが無効または失効しています。" });
+        }
+
+        // 盗用検知（リフレッシュトークン再利用検知）:
+        // 既に失効済み（=ローテーション済み）のトークンが再提示された場合、トークンが盗まれて
+        // 攻撃者と正規ユーザーの双方が使っている可能性が高い。安全側に倒し、当該ユーザーの
+        // 全リフレッシュトークンを失効させてセッションを強制終了する。
+        if (stored.RevokedAt is not null)
+        {
+            await RevokeAllUserTokensAsync(stored.UserId);
+            return Unauthorized(new { message = "リフレッシュトークンが無効または失効しています。" });
+        }
+
+        if (!stored.IsActive)
         {
             return Unauthorized(new { message = "リフレッシュトークンが無効または失効しています。" });
         }
 
         // ローテーション: 旧トークンを失効させ、新しいトークンペアを発行する。
+        // 絶対期限はファミリーを通じて引き継ぎ、ローテーションでは延長しない。
         stored.RevokedAt = DateTime.UtcNow;
 
-        return Ok(await IssueAuthCookiesAsync(stored.User));
+        return Ok(await IssueAuthCookiesAsync(stored.User, stored.AbsoluteExpiresAt));
+    }
+
+    /// <summary>指定ユーザーの未失効リフレッシュトークンをすべて失効させる（盗用検知時のセッション強制終了）。</summary>
+    private async Task RevokeAllUserTokensAsync(int userId)
+    {
+        var now = DateTime.UtcNow;
+        var tokens = await _db.RefreshTokens
+            .Where(t => t.UserId == userId && t.RevokedAt == null)
+            .ToListAsync();
+
+        foreach (var token in tokens)
+        {
+            token.RevokedAt = now;
+        }
+
+        await _db.SaveChangesAsync();
     }
 
     /// <summary>ログアウト。リフレッシュトークンを失効させ、認証 Cookie を破棄する。</summary>
@@ -153,23 +185,38 @@ public class AuthController : ControllerBase
     /// アクセストークン（短命）とリフレッシュトークン（長命）を発行し、いずれも httpOnly Cookie に格納する。
     /// リフレッシュトークンはハッシュのみ DB に保存し、トークン本体はレスポンスボディに含めない。
     /// </summary>
-    private async Task<UserDto> IssueAuthCookiesAsync(User user)
+    /// <param name="absoluteExpiresAt">
+    /// トークンファミリーの絶対期限。ローテーション時は旧トークンの値を引き継ぎ延長を防ぐ。
+    /// 新規ログイン／登録時は null を渡し、現在時刻から既定の絶対寿命で新たに設定する。
+    /// </param>
+    private async Task<UserDto> IssueAuthCookiesAsync(User user, DateTime? absoluteExpiresAt = null)
     {
+        var now = DateTimeOffset.UtcNow;
+
         // アクセストークン（JWT）
         var accessToken = _tokenService.CreateToken(user);
-        var accessExpires = DateTimeOffset.UtcNow.AddMinutes(_jwtSettings.ExpiryMinutes);
+        var accessExpires = now.AddMinutes(_jwtSettings.ExpiryMinutes);
         Response.Cookies.Append(
             AuthCookie.Name, accessToken, AuthCookie.BuildSetOptions(Request.IsHttps, accessExpires));
 
         // リフレッシュトークン（ハッシュを永続化、本体は Cookie に格納）
         var (refreshToken, hash) = TokenService.CreateRefreshToken();
-        var refreshExpires = DateTimeOffset.UtcNow.AddDays(_tokenService.RefreshTokenDays);
+        var absolute = absoluteExpiresAt ?? now.AddDays(_tokenService.RefreshTokenAbsoluteDays).UtcDateTime;
+
+        // スライド期限。ただし絶対期限を超えないようにキャップする。
+        var refreshExpires = now.AddDays(_tokenService.RefreshTokenDays);
+        if (refreshExpires.UtcDateTime > absolute)
+        {
+            refreshExpires = new DateTimeOffset(absolute, TimeSpan.Zero);
+        }
+
         _db.RefreshTokens.Add(new RefreshToken
         {
             TokenHash = hash,
             UserId = user.Id,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = now.UtcDateTime,
             ExpiresAt = refreshExpires.UtcDateTime,
+            AbsoluteExpiresAt = absolute,
         });
         await _db.SaveChangesAsync();
         Response.Cookies.Append(

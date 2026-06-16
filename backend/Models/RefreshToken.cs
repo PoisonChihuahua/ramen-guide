@@ -19,9 +19,16 @@ public class RefreshToken
 
     public DateTime ExpiresAt { get; set; }
 
+    /// <summary>
+    /// トークンファミリーの絶対有効期限。ローテーションしても延長されない上限。
+    /// これにより、盗まれたリフレッシュトークンを使ったセッションの無期限延命を防ぐ。
+    /// </summary>
+    public DateTime AbsoluteExpiresAt { get; set; }
+
     /// <summary>失効日時。null の場合は未失効。ログアウト・ローテーション時に設定する。</summary>
     public DateTime? RevokedAt { get; set; }
 
-    /// <summary>未失効かつ未期限切れであれば有効。</summary>
-    public bool IsActive => RevokedAt is null && DateTime.UtcNow < ExpiresAt;
+    /// <summary>未失効かつ、スライド期限・絶対期限のいずれも未経過であれば有効。</summary>
+    public bool IsActive =>
+        RevokedAt is null && DateTime.UtcNow < ExpiresAt && DateTime.UtcNow < AbsoluteExpiresAt;
 }
