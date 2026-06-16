@@ -1,0 +1,15 @@
+# ビルド成果物
+bin/
+obj/
+
+# ローカル SQLite データ
+*.db
+*.db-shm
+*.db-wal
+
+# 本番設定（イメージに焼き込まない。実行時に環境変数で注入する）
+appsettings.Production.json
+
+# Docker 関連
+Dockerfile
+.dockerignore

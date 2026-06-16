@@ -1,0 +1,54 @@
+# ラーメン図鑑 (ramen-guide) — Docker Compose
+#
+# 使い方:
+#   docker compose up --build      # ビルドして起動
+#   docker compose down            # 停止・削除（DB volume は保持）
+#   docker compose down -v         # DB volume も含めて削除
+#
+# 起動後:
+#   フロントエンド  http://localhost:8080
+#   バックエンド    http://localhost:5105  (Swagger: http://localhost:5105/swagger)
+#
+# 既定は開発相当の構成（ASPNETCORE_ENVIRONMENT=Development）。
+# 本番運用時は Jwt__Key / Cors__AllowedOrigins__0 などを安全な値に上書きし、
+# ASPNETCORE_ENVIRONMENT=Production を設定すること（下部コメント参照）。
+
+services:
+  backend:
+    build:
+      context: ./backend
+    image: ramen-guide-backend
+    container_name: ramen-guide-backend
+    environment:
+      # 既定鍵・管理者シードを許可する開発相当の構成。
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      # SQLite の DB ファイルは永続化 volume に配置。
+      ConnectionStrings__DefaultConnection: "Data Source=/app/data/ramensite.db"
+      # ブラウザから見たフロントエンドの Origin を CORS 許可（httpOnly Cookie 用に Credentials 許可）。
+      Cors__AllowedOrigins__0: "http://localhost:8080"
+      # --- 本番運用時はここを上書き ---
+      # ASPNETCORE_ENVIRONMENT: Production
+      # Jwt__Key: "<32文字以上の安全な署名鍵>"
+    ports:
+      - "5105:8080"
+    volumes:
+      - backend-data:/app/data
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # ブラウザがアクセスするバックエンドの URL（ビルド時に焼き込まれる）。
+        VITE_API_BASE_URL: "http://localhost:5105"
+    image: ramen-guide-frontend
+    container_name: ramen-guide-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  backend-data:
