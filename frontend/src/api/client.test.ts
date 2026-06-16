@@ -1,11 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  apiFetch,
-  ApiError,
-  setTokens,
-  getToken,
-  getRefreshToken,
-} from './client';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { apiFetch, ApiError } from './client';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -14,84 +8,69 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-describe('apiFetch のトークン自動リフレッシュ', () => {
-  beforeEach(() => {
-    localStorage.clear();
-  });
-
+describe('apiFetch（httpOnly Cookie ＋ 自動リフレッシュ）', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('認証リクエストが 401 のときリフレッシュして再試行する', async () => {
-    setTokens('expired-access', 'valid-refresh');
+  it('Cookie 送信のため常に credentials: include で呼び出す', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(jsonResponse({ id: 1, displayName: '太郎' })),
+    );
+    vi.stubGlobal('fetch', fetchMock);
 
+    await apiFetch('/api/auth/me');
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.credentials).toBe('include');
+  });
+
+  it('401 のときリフレッシュして再試行する', async () => {
     let meCalls = 0;
     const fetchMock = vi.fn((url: string) => {
       if (url.includes('/api/auth/refresh')) {
-        return Promise.resolve(
-          jsonResponse({ token: 'new-access', refreshToken: 'new-refresh' }),
-        );
+        return Promise.resolve(new Response(null, { status: 204 }));
       }
       meCalls += 1;
       if (meCalls === 1) {
         return Promise.resolve(new Response('Unauthorized', { status: 401 }));
       }
-      return Promise.resolve(
-        jsonResponse({ id: 1, email: 'a@example.com', displayName: '太郎' }),
-      );
+      return Promise.resolve(jsonResponse({ id: 1, displayName: '太郎' }));
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await apiFetch<{ displayName: string }>('/api/auth/me', {
-      auth: true,
-    });
+    const result = await apiFetch<{ displayName: string }>('/api/auth/me');
 
     expect(result.displayName).toBe('太郎');
-    // 新しいトークンが保存されている
-    expect(getToken()).toBe('new-access');
-    expect(getRefreshToken()).toBe('new-refresh');
-    // 再試行時は新しいアクセストークンを付与している
-    const retryCall = fetchMock.mock.calls.at(-1);
-    const retryHeaders = (retryCall?.[1] as RequestInit).headers as Record<
-      string,
-      string
-    >;
-    expect(retryHeaders['Authorization']).toBe('Bearer new-access');
+    // me(401) → refresh(204) → me(200) の3回
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const refreshCalled = fetchMock.mock.calls.some((c) =>
+      String(c[0]).includes('/api/auth/refresh'),
+    );
+    expect(refreshCalled).toBe(true);
   });
 
-  it('リフレッシュに失敗したらトークンを破棄して 401 を投げる', async () => {
-    setTokens('expired-access', 'invalid-refresh');
-
-    const fetchMock = vi.fn((url: string) => {
-      if (url.includes('/api/auth/refresh')) {
-        return Promise.resolve(new Response('Unauthorized', { status: 401 }));
-      }
-      return Promise.resolve(new Response('Unauthorized', { status: 401 }));
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    await expect(apiFetch('/api/auth/me', { auth: true })).rejects.toMatchObject({
-      status: 401,
-    });
-    await expect(
-      apiFetch('/api/auth/me', { auth: true }),
-    ).rejects.toBeInstanceOf(ApiError);
-
-    expect(getToken()).toBeNull();
-    expect(getRefreshToken()).toBeNull();
-  });
-
-  it('リフレッシュトークンが無ければリフレッシュを試みない', async () => {
+  it('リフレッシュに失敗したら 401 を投げる', async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve(new Response('Unauthorized', { status: 401 })),
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(apiFetch('/api/auth/me', { auth: true })).rejects.toBeInstanceOf(
-      ApiError,
+    await expect(apiFetch('/api/auth/me')).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it('認証エンドポイント自身の 401 ではリフレッシュしない', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(
+        jsonResponse({ message: 'メールアドレスまたはパスワードが正しくありません。' }, 401),
+      ),
     );
-    // 401 → リフレッシュトークンが無いので1回のみ
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      apiFetch('/api/auth/login', { method: 'POST', body: {} }),
+    ).rejects.toMatchObject({ status: 401 });
+    // login は NO_REFRESH のため1回のみ
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

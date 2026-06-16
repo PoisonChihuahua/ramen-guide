@@ -1,30 +1,30 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type Route } from '@playwright/test';
 
 // バックエンド API のオリジン（VITE_API_BASE_URL の既定値）。
 // dev サーバの /src/api/*.ts と取り違えないよう、オリジンを明示してモックする。
 const API = 'http://localhost:5105';
 
+// 認証は httpOnly Cookie で行われるため、レスポンスボディはユーザー情報のみ。
 const USER = { id: 1, email: 'taro@example.com', displayName: '太郎' };
-const AUTH_BODY = JSON.stringify({
-  token: 'access-token',
-  refreshToken: 'refresh-token',
-  user: USER,
-});
-
-/** 店舗一覧 API は常に空配列を返し、ホーム描画を安定させる。 */
-async function mockShops(page: Page) {
-  await page.route(`${API}/api/shops**`, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
-  );
-}
+const USER_BODY = JSON.stringify(USER);
 
 function jsonRoute(status: number, body: string) {
-  return (route: import('@playwright/test').Route) =>
+  return (route: Route) =>
     route.fulfill({ status, contentType: 'application/json', body });
 }
 
+/**
+ * 既定では未ログイン状態を再現する。
+ * 店舗一覧は空配列、/me と /refresh は 401（セッション無し）として応答する。
+ */
+async function mockLoggedOut(page: Page) {
+  await page.route(`${API}/api/shops**`, jsonRoute(200, '[]'));
+  await page.route(`${API}/api/auth/me`, jsonRoute(401, '{}'));
+  await page.route(`${API}/api/auth/refresh`, jsonRoute(401, '{}'));
+}
+
 test.beforeEach(async ({ page }) => {
-  await mockShops(page);
+  await mockLoggedOut(page);
 });
 
 test('未ログインで /mypage にアクセスすると /login にリダイレクトされる', async ({
@@ -39,8 +39,7 @@ test('未ログインで /mypage にアクセスすると /login にリダイレ
 test('ログインに成功するとホームに遷移し、マイページを閲覧できる', async ({
   page,
 }) => {
-  await page.route(`${API}/api/auth/login`, jsonRoute(200, AUTH_BODY));
-  await page.route(`${API}/api/auth/me`, jsonRoute(200, JSON.stringify(USER)));
+  await page.route(`${API}/api/auth/login`, jsonRoute(200, USER_BODY));
 
   await page.goto('/login');
   await page.getByLabel('メールアドレス').fill('taro@example.com');
@@ -81,7 +80,7 @@ test('ログインに失敗するとエラーメッセージを表示する', as
 });
 
 test('新規登録に成功するとホームに遷移する', async ({ page }) => {
-  await page.route(`${API}/api/auth/register`, jsonRoute(200, AUTH_BODY));
+  await page.route(`${API}/api/auth/register`, jsonRoute(200, USER_BODY));
 
   await page.goto('/register');
   await page.getByLabel('表示名').fill('太郎');
@@ -94,8 +93,7 @@ test('新規登録に成功するとホームに遷移する', async ({ page }) 
 });
 
 test('ログアウトすると保護ページにアクセスできなくなる', async ({ page }) => {
-  await page.route(`${API}/api/auth/login`, jsonRoute(200, AUTH_BODY));
-  await page.route(`${API}/api/auth/me`, jsonRoute(200, JSON.stringify(USER)));
+  await page.route(`${API}/api/auth/login`, jsonRoute(200, USER_BODY));
   await page.route(`${API}/api/auth/logout`, (route) =>
     route.fulfill({ status: 204, body: '' }),
   );
@@ -111,7 +109,7 @@ test('ログアウトすると保護ページにアクセスできなくなる',
   await page.getByRole('button', { name: 'ログアウト' }).click();
   await expect(headerNav.getByRole('link', { name: 'ログイン' })).toBeVisible();
 
-  // 保護ページは再びリダイレクトされる
+  // 保護ページは再びリダイレクトされる（/me と /refresh は 401 のまま）
   await page.goto('/mypage');
   await expect(page).toHaveURL(/\/login$/);
 });

@@ -361,8 +361,18 @@ body { margin: 0; }
 .info-btn--primary:hover { background: var(--accent-deep); transform: translateY(-1px); }
 .info-btn--ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--line); }
 .info-btn--ghost:hover { border-color: var(--accent-tint); background: var(--accent-wash); }
+.info-btn--active { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-wash); }
+a.info-btn { text-decoration: none; }
 
 .back-link { display: inline-flex; }
+
+/* ---------- 静的ページ ---------- */
+.static-body { max-width: 720px; color: var(--ink); font-size: 15px; line-height: 1.9; }
+.static-body h3 { font-size: 17px; font-weight: 800; margin: 28px 0 10px; letter-spacing: .02em; }
+.static-body p { margin: 0 0 14px; }
+.static-body ul { margin: 0 0 14px; padding-left: 1.25em; }
+.static-body li { margin: 4px 0; }
+.static-link { color: var(--accent); font-weight: 700; }
 
 /* ---------- 認証フォーム ---------- */
 .auth-page { flex: 1; display: grid; place-items: center; padding: 50px 20px; }

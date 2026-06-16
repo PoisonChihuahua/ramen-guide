@@ -19,6 +19,9 @@ export function Layout() {
             <Link className="nav-link" to="/">
               店舗一覧
             </Link>
+            <Link className="nav-link" to="/favorites">
+              お気に入り
+            </Link>
             {user ? (
               <>
                 <Link className="nav-link" to="/mypage">
@@ -63,20 +66,20 @@ export function Layout() {
             <div className="footer-col">
               <h4>探す</h4>
               <Link to="/">店舗一覧</Link>
-              <Link to="/">ジャンルから</Link>
-              <Link to="/">エリアから</Link>
+              <Link to="/#search">ジャンルから</Link>
+              <Link to="/#search">エリアから</Link>
             </div>
             <div className="footer-col">
               <h4>アカウント</h4>
               <Link to="/login">ログイン</Link>
               <Link to="/register">新規登録</Link>
-              <Link to="/">お気に入り</Link>
+              <Link to="/favorites">お気に入り</Link>
             </div>
             <div className="footer-col">
               <h4>サイト情報</h4>
-              <Link to="/">このサイトについて</Link>
-              <Link to="/">お問い合わせ</Link>
-              <Link to="/">利用規約</Link>
+              <Link to="/about">このサイトについて</Link>
+              <Link to="/contact">お問い合わせ</Link>
+              <Link to="/terms">利用規約</Link>
             </div>
           </div>
         </div>

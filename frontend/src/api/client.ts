@@ -1,28 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5105';
 
-const TOKEN_KEY = 'ramensite_token';
-const REFRESH_KEY = 'ramensite_refresh_token';
-
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function getRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_KEY);
-}
-
-/** アクセストークンとリフレッシュトークンをまとめて保存する。 */
-export function setTokens(token: string, refreshToken: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
-  localStorage.setItem(REFRESH_KEY, refreshToken);
-}
-
-/** 両トークンを破棄する（ログアウト・認証失効時）。 */
-export function clearTokens(): void {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(REFRESH_KEY);
-}
-
 export class ApiError extends Error {
   status: number;
 
@@ -36,44 +13,32 @@ export class ApiError extends Error {
 interface RequestOptions {
   method?: string;
   body?: unknown;
-  auth?: boolean;
 }
 
-interface RefreshResponse {
-  token: string;
-  refreshToken: string;
-}
+// 自動リフレッシュの対象外（これら自体が 401 を返してもリフレッシュしない）
+const NO_REFRESH_PATHS = [
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/refresh',
+  '/api/auth/logout',
+];
 
-// 同時に複数の 401 が起きても、リフレッシュ要求は1回に集約する（single-flight）。
+// 同時に複数の 401 が起きてもリフレッシュ要求は1回に集約する（single-flight）。
 let refreshPromise: Promise<boolean> | null = null;
 
 async function performRefresh(): Promise<boolean> {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) {
-    return false;
-  }
-
   try {
     const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
+      credentials: 'include',
     });
-
-    if (!response.ok) {
-      clearTokens();
-      return false;
-    }
-
-    const data = (await response.json()) as RefreshResponse;
-    setTokens(data.token, data.refreshToken);
-    return true;
+    return response.ok;
   } catch {
     return false;
   }
 }
 
-function refreshTokens(): Promise<boolean> {
+function refreshSession(): Promise<boolean> {
   if (!refreshPromise) {
     refreshPromise = performRefresh().finally(() => {
       refreshPromise = null;
@@ -83,29 +48,27 @@ function refreshTokens(): Promise<boolean> {
 }
 
 /**
- * 共通 fetch ラッパー。JWT 付与・エラーハンドリング・401 時のトークン自動リフレッシュを一元化する。
+ * 共通 fetch ラッパー。エラーハンドリングを一元化する。
+ * 認証は httpOnly Cookie で行うため、常に credentials: 'include' で Cookie を送受信する
+ * （JWT を JavaScript で保持しないことで XSS によるトークン窃取を防ぐ）。
+ * アクセストークン失効時（401）はリフレッシュ Cookie で一度だけ再発行を試み、再試行する。
  */
 export async function apiFetch<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const { method = 'GET', body, auth = false } = options;
+  const { method = 'GET', body } = options;
 
   const sendRequest = (): Promise<Response> => {
     const headers: Record<string, string> = {};
     if (body !== undefined) {
       headers['Content-Type'] = 'application/json';
     }
-    if (auth) {
-      const token = getToken();
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-    }
 
     return fetch(`${API_BASE_URL}${path}`, {
       method,
       headers,
+      credentials: 'include',
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   };
@@ -113,8 +76,8 @@ export async function apiFetch<T>(
   let response = await sendRequest();
 
   // アクセストークンが失効していたら、一度だけリフレッシュして再試行する。
-  if (response.status === 401 && auth && getRefreshToken()) {
-    const refreshed = await refreshTokens();
+  if (response.status === 401 && !NO_REFRESH_PATHS.includes(path)) {
+    const refreshed = await refreshSession();
     if (refreshed) {
       response = await sendRequest();
     }

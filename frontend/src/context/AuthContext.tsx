@@ -2,62 +2,37 @@ import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { AuthContext } from './auth-context';
 import type { User } from '../types';
 import * as authApi from '../api/auth';
-import { getToken, getRefreshToken, setTokens, clearTokens } from '../api/client';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  // トークンが無ければ復元処理は不要なので、最初からローディングしない
-  const [isLoading, setIsLoading] = useState(() => getToken() !== null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // 起動時: トークンがあれば検証して復元（失効していれば自動リフレッシュされる）
+  // 起動時: httpOnly Cookie のセッションがあれば検証して復元する。
+  // トークンは JS から見えないため、認証済みかどうかは /me の成否で判定する。
   useEffect(() => {
-    if (!getToken()) {
-      return;
-    }
-    let active = true;
     authApi
       .fetchMe()
-      .then((restored) => {
-        if (active) {
-          setUser(restored);
-        }
-      })
-      .catch(() => clearTokens())
-      .finally(() => {
-        if (active) {
-          setIsLoading(false);
-        }
-      });
-    return () => {
-      active = false;
-    };
+      .then(setUser)
+      .catch(() => setUser(null))
+      .finally(() => setIsLoading(false));
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const res = await authApi.login(email, password);
-    setTokens(res.token, res.refreshToken);
-    setUser(res.user);
+    const loggedInUser = await authApi.login(email, password);
+    setUser(loggedInUser);
   }, []);
 
   const register = useCallback(
     async (email: string, password: string, displayName: string) => {
-      const res = await authApi.register(email, password, displayName);
-      setTokens(res.token, res.refreshToken);
-      setUser(res.user);
+      const registeredUser = await authApi.register(email, password, displayName);
+      setUser(registeredUser);
     },
     [],
   );
 
-  const logout = useCallback(() => {
-    const refreshToken = getRefreshToken();
-    clearTokens();
+  const logout = useCallback(async () => {
+    await authApi.logout();
     setUser(null);
-    // サーバ側のリフレッシュトークンも失効させる（ベストエフォート）
-    if (refreshToken) {
-      authApi.logout(refreshToken).catch(() => {
-        /* ローカルは既にクリア済みのため失敗は無視 */
-      });
-    }
   }, []);
 
   return (

@@ -1,6 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchShop } from '../api/shops';
+import { useFavorites } from '../hooks/useFavorites';
 
 // ジャンル → プレースホルダーの出汁トーン
 const GENRE_TONE: Record<string, string> = {
@@ -25,6 +26,8 @@ export function ShopDetailPage() {
     enabled: Number.isFinite(shopId),
   });
 
+  const { isFavorite, toggleFavorite } = useFavorites();
+
   if (isLoading) return <main className="state-message">読み込み中...</main>;
   if (isError || !shop)
     return (
@@ -37,6 +40,10 @@ export function ShopDetailPage() {
     );
 
   const tone = GENRE_TONE[shop.genre] ?? 'shoyu';
+  const favorited = isFavorite(shop.id);
+  const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    `${shop.name} ${shop.address}`,
+  )}`;
 
   return (
     <main className="shop-detail-page">
@@ -114,11 +121,21 @@ export function ShopDetailPage() {
               </div>
             </div>
             <div className="info-actions">
-              <button className="info-btn info-btn--primary" type="button">
+              <a
+                className="info-btn info-btn--primary"
+                href={mapUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 地図で見る
-              </button>
-              <button className="info-btn info-btn--ghost" type="button">
-                お気に入りに追加
+              </a>
+              <button
+                className={`info-btn info-btn--ghost${favorited ? ' info-btn--active' : ''}`}
+                type="button"
+                aria-pressed={favorited}
+                onClick={() => toggleFavorite(shop.id)}
+              >
+                {favorited ? '★ お気に入り登録済み' : '☆ お気に入りに追加'}
               </button>
             </div>
           </div>

@@ -11,10 +11,5 @@ public record LoginRequest(
     [Required, EmailAddress] string Email,
     [Required] string Password);
 
-/// <summary>リフレッシュ／ログアウト時に生のリフレッシュトークンを受け取る。</summary>
-public record RefreshRequest(string RefreshToken);
-
-/// <summary>ログイン/登録/リフレッシュ成功時のレスポンス。</summary>
-public record AuthResponse(string Token, string RefreshToken, UserDto User);
-
+/// <summary>ログイン/登録/ユーザー照会のレスポンス。トークンは httpOnly Cookie で送られるためボディには含めない。</summary>
 public record UserDto(int Id, string Email, string DisplayName);

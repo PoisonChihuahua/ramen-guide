@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using RamenSite.Api.Data;
 using RamenSite.Api.Dtos;
 using RamenSite.Api.Models;
@@ -19,20 +20,23 @@ public class AuthController : ControllerBase
     private readonly AppDbContext _db;
     private readonly TokenService _tokenService;
     private readonly IPasswordHasher<User> _passwordHasher;
+    private readonly JwtSettings _jwtSettings;
 
     public AuthController(
         AppDbContext db,
         TokenService tokenService,
-        IPasswordHasher<User> passwordHasher)
+        IPasswordHasher<User> passwordHasher,
+        IOptions<JwtSettings> jwtSettings)
     {
         _db = db;
         _tokenService = tokenService;
         _passwordHasher = passwordHasher;
+        _jwtSettings = jwtSettings.Value;
     }
 
-    /// <summary>ユーザー登録。</summary>
+    /// <summary>ユーザー登録。成功で httpOnly Cookie にアクセス／リフレッシュトークンを設定する。</summary>
     [HttpPost("register")]
-    public async Task<ActionResult<AuthResponse>> Register(RegisterRequest request)
+    public async Task<ActionResult<UserDto>> Register(RegisterRequest request)
     {
         var email = request.Email.Trim().ToLowerInvariant();
 
@@ -52,12 +56,12 @@ public class AuthController : ControllerBase
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
 
-        return Ok(await BuildAuthResponseAsync(user));
+        return Ok(await IssueAuthCookiesAsync(user));
     }
 
-    /// <summary>ログイン。成功で JWT を返す。</summary>
+    /// <summary>ログイン。成功で httpOnly Cookie にアクセス／リフレッシュトークンを設定する。</summary>
     [HttpPost("login")]
-    public async Task<ActionResult<AuthResponse>> Login(LoginRequest request)
+    public async Task<ActionResult<UserDto>> Login(LoginRequest request)
     {
         var email = request.Email.Trim().ToLowerInvariant();
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
@@ -73,22 +77,23 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = "メールアドレスまたはパスワードが正しくありません。" });
         }
 
-        return Ok(await BuildAuthResponseAsync(user));
+        return Ok(await IssueAuthCookiesAsync(user));
     }
 
     /// <summary>
-    /// リフレッシュトークンを使ってアクセストークンを再発行する。
-    /// 旧トークンは失効させ、新しいリフレッシュトークンを発行する（ローテーション）。
+    /// リフレッシュトークン Cookie を使ってアクセストークンを再発行する。
+    /// 旧リフレッシュトークンは失効させ、新しいものを発行する（ローテーション）。
     /// </summary>
     [HttpPost("refresh")]
-    public async Task<ActionResult<AuthResponse>> Refresh(RefreshRequest request)
+    public async Task<ActionResult<UserDto>> Refresh()
     {
-        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+        if (!Request.Cookies.TryGetValue(AuthCookie.RefreshName, out var raw) ||
+            string.IsNullOrWhiteSpace(raw))
         {
-            return Unauthorized(new { message = "リフレッシュトークンが指定されていません。" });
+            return Unauthorized(new { message = "リフレッシュトークンがありません。" });
         }
 
-        var hash = TokenService.HashToken(request.RefreshToken);
+        var hash = TokenService.HashToken(raw);
         var stored = await _db.RefreshTokens
             .Include(t => t.User)
             .FirstOrDefaultAsync(t => t.TokenHash == hash);
@@ -101,16 +106,17 @@ public class AuthController : ControllerBase
         // ローテーション: 旧トークンを失効させ、新しいトークンペアを発行する。
         stored.RevokedAt = DateTime.UtcNow;
 
-        return Ok(await BuildAuthResponseAsync(stored.User));
+        return Ok(await IssueAuthCookiesAsync(stored.User));
     }
 
-    /// <summary>ログアウト。リフレッシュトークンを失効させる（冪等）。</summary>
+    /// <summary>ログアウト。リフレッシュトークンを失効させ、認証 Cookie を破棄する。</summary>
     [HttpPost("logout")]
-    public async Task<IActionResult> Logout(RefreshRequest request)
+    public async Task<IActionResult> Logout()
     {
-        if (!string.IsNullOrWhiteSpace(request.RefreshToken))
+        if (Request.Cookies.TryGetValue(AuthCookie.RefreshName, out var raw) &&
+            !string.IsNullOrWhiteSpace(raw))
         {
-            var hash = TokenService.HashToken(request.RefreshToken);
+            var hash = TokenService.HashToken(raw);
             var stored = await _db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash);
             if (stored is not null && stored.RevokedAt is null)
             {
@@ -119,6 +125,8 @@ public class AuthController : ControllerBase
             }
         }
 
+        Response.Cookies.Delete(AuthCookie.Name, AuthCookie.BuildDeleteOptions(Request.IsHttps));
+        Response.Cookies.Delete(AuthCookie.RefreshName, AuthCookie.BuildDeleteOptions(Request.IsHttps));
         return NoContent();
     }
 
@@ -144,21 +152,32 @@ public class AuthController : ControllerBase
         return Ok(new UserDto(user.Id, user.Email, user.DisplayName));
     }
 
-    /// <summary>アクセストークン＋リフレッシュトークンを発行し、リフレッシュトークンを永続化する。</summary>
-    private async Task<AuthResponse> BuildAuthResponseAsync(User user)
+    /// <summary>
+    /// アクセストークン（短命）とリフレッシュトークン（長命）を発行し、いずれも httpOnly Cookie に格納する。
+    /// リフレッシュトークンはハッシュのみ DB に保存し、トークン本体はレスポンスボディに含めない。
+    /// </summary>
+    private async Task<UserDto> IssueAuthCookiesAsync(User user)
     {
+        // アクセストークン（JWT）
         var accessToken = _tokenService.CreateToken(user);
-        var (refreshToken, hash) = TokenService.CreateRefreshToken();
+        var accessExpires = DateTimeOffset.UtcNow.AddMinutes(_jwtSettings.ExpiryMinutes);
+        Response.Cookies.Append(
+            AuthCookie.Name, accessToken, AuthCookie.BuildSetOptions(Request.IsHttps, accessExpires));
 
+        // リフレッシュトークン（ハッシュを永続化、本体は Cookie に格納）
+        var (refreshToken, hash) = TokenService.CreateRefreshToken();
+        var refreshExpires = DateTimeOffset.UtcNow.AddDays(_tokenService.RefreshTokenDays);
         _db.RefreshTokens.Add(new RefreshToken
         {
             TokenHash = hash,
             UserId = user.Id,
             CreatedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddDays(_tokenService.RefreshTokenDays),
+            ExpiresAt = refreshExpires.UtcDateTime,
         });
         await _db.SaveChangesAsync();
+        Response.Cookies.Append(
+            AuthCookie.RefreshName, refreshToken, AuthCookie.BuildSetOptions(Request.IsHttps, refreshExpires));
 
-        return new AuthResponse(accessToken, refreshToken, new UserDto(user.Id, user.Email, user.DisplayName));
+        return new UserDto(user.Id, user.Email, user.DisplayName);
     }
 }
