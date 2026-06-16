@@ -128,4 +128,15 @@ public class AdminShopsApiTests : IClassFixture<RamenApiFactory>
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
+
+    [Fact]
+    public async Task DeleteShop_WhenMissing_ReturnsNotFound()
+    {
+        var token = await _client.LoginAsAdminAsync();
+
+        var response = await _client.SendWithTokenAsync(
+            HttpMethod.Delete, "/api/shops/999999", token);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
 }
