@@ -16,11 +16,6 @@ export interface User {
   displayName: string;
 }
 
-export interface AuthResponse {
-  token: string;
-  user: User;
-}
-
 export interface ShopFilters {
   q?: string;
   genre?: string;

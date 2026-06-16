@@ -1,19 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5105';
 
-const TOKEN_KEY = 'ramensite_token';
-
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
-}
-
 export class ApiError extends Error {
   status: number;
 
@@ -27,32 +13,28 @@ export class ApiError extends Error {
 interface RequestOptions {
   method?: string;
   body?: unknown;
-  auth?: boolean;
 }
 
 /**
- * 共通 fetch ラッパー。JWT 付与とエラーハンドリングを一元化する。
+ * 共通 fetch ラッパー。エラーハンドリングを一元化する。
+ * 認証は httpOnly Cookie で行うため、常に credentials: 'include' で Cookie を送受信する
+ * （JWT を JavaScript で保持しないことで XSS によるトークン窃取を防ぐ）。
  */
 export async function apiFetch<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const { method = 'GET', body, auth = false } = options;
+  const { method = 'GET', body } = options;
 
   const headers: Record<string, string> = {};
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json';
   }
-  if (auth) {
-    const token = getToken();
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-  }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
     headers,
+    credentials: 'include',
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
