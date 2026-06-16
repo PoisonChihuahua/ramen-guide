@@ -19,6 +19,12 @@ obj/
 *.db-wal
 appsettings.Production.json
 
+# --- TLS 証明書（プロキシで生成 or ホスト配置した場合の保険。鍵をコミットしない） ---
+proxy/certs/
+*.crt
+*.key
+*.pem
+
 # --- Claude ---
 .claude/
 

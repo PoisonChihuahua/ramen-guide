@@ -5,15 +5,44 @@
 #   docker compose down            # 停止・削除（DB volume は保持）
 #   docker compose down -v         # DB volume も含めて削除
 #
-# 起動後:
-#   フロントエンド  http://localhost:8080
-#   バックエンド    http://localhost:5105  (Swagger: http://localhost:5105/swagger)
+# 構成:
+#   リバースプロキシ (nginx) が HTTPS(:443) を終端し、パスで振り分ける。
+#     /api/, /swagger … backend (ASP.NET Core)
+#     それ以外          … frontend (静的 SPA)
+#   フロント／バックは同一オリジン(https://localhost)になるため CORS は不要。
+#   HTTP(:80) は HTTPS へリダイレクトする。
+#
+# 起動後（自己署名証明書のためブラウザでは警告が出る → 続行で OK）:
+#   アプリ      https://localhost
+#   Swagger     https://localhost/swagger   (Development のみ)
 #
 # 既定は開発相当の構成（ASPNETCORE_ENVIRONMENT=Development）。
-# 本番運用時は Jwt__Key / Cors__AllowedOrigins__0 などを安全な値に上書きし、
+# 本番運用時は Jwt__Key などを安全な値に上書きし、
 # ASPNETCORE_ENVIRONMENT=Production を設定すること（下部コメント参照）。
 
 services:
+  # --- リバースプロキシ: 唯一の公開エンドポイント（TLS 終端） ---
+  proxy:
+    build:
+      context: ./proxy
+    image: ramen-guide-proxy
+    container_name: ramen-guide-proxy
+    ports:
+      - "80:80"    # HTTPS へリダイレクト
+      - "443:443"  # TLS 終端
+    volumes:
+      # ルーティング設定をコンテナへ注入（読み取り専用）。編集後は restart で反映。
+      - ./proxy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # TLS 証明書のディレクトリ（ホスト ./proxy/certs を共有。.gitignore で除外済み）。
+      #  - 既定: 空なら起動時にエントリポイントが自己署名証明書を生成（ブラウザ警告あり）。
+      #  - 推奨: ./proxy/setup-trusted-cert.sh を実行すると mkcert で「信頼される証明書」を
+      #          生成し、ブラウザ警告が出なくなる。
+      - ./proxy/certs:/etc/nginx/certs
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+
   backend:
     build:
       context: ./backend
@@ -25,13 +54,19 @@ services:
       ASPNETCORE_URLS: http://+:8080
       # SQLite の DB ファイルは永続化 volume に配置。
       ConnectionStrings__DefaultConnection: "Data Source=/app/data/ramensite.db"
-      # ブラウザから見たフロントエンドの Origin を CORS 許可（httpOnly Cookie 用に Credentials 許可）。
-      Cors__AllowedOrigins__0: "http://localhost:8080"
+      # 同一オリジン(プロキシ経由)のため CORS は実質不要だが、プロキシのオリジンを
+      # 明示的に許可しておく（直接アクセスや将来の構成変更時の保険）。
+      Cors__AllowedOrigins__0: "https://localhost"
       # --- 本番運用時はここを上書き ---
       # ASPNETCORE_ENVIRONMENT: Production
       # Jwt__Key: "<32文字以上の安全な署名鍵>"
-    ports:
-      - "5105:8080"
+      # Cors__AllowedOrigins__0: "https://<本番ドメイン>"
+    # ホストへは公開せず、Docker 内部ネットワーク経由でプロキシからのみ到達可能。
+    # 直接デバッグしたい場合は下記の ports を有効化する。
+    # ports:
+    #   - "5105:8080"
+    expose:
+      - "8080"
     volumes:
       - backend-data:/app/data
     restart: unless-stopped
@@ -40,12 +75,14 @@ services:
     build:
       context: ./frontend
       args:
-        # ブラウザがアクセスするバックエンドの URL（ビルド時に焼き込まれる）。
-        VITE_API_BASE_URL: "http://localhost:5105"
+        # 同一オリジン配信のため API のベース URL は相対（空文字）にする。
+        # これにより fetch は /api/... と同一オリジンへ送られ、プロキシが backend へ転送する。
+        VITE_API_BASE_URL: ""
     image: ramen-guide-frontend
     container_name: ramen-guide-frontend
-    ports:
-      - "8080:80"
+    # ホストへは公開せず、プロキシ経由でのみ配信。
+    expose:
+      - "80"
     depends_on:
       - backend
     restart: unless-stopped
