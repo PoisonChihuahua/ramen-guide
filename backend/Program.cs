@@ -2,6 +2,7 @@ using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +19,17 @@ const string FrontendCorsPolicy = "FrontendCors";
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// リバースプロキシ経由のヘッダを信頼する。プロキシが付与する X-Forwarded-For /
+// X-Forwarded-Proto を解釈し、実クライアント IP（レート制限のパーティションキー）と
+// スキーム（Cookie の Secure 判定）を復元する。backend はホストへ公開せず Docker 内部
+// ネットワークのプロキシからのみ到達するため、既定のネットワーク制限は解除して信頼する。
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 // SQLite + EF Core
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -151,6 +163,9 @@ using (var scope = app.Services.CreateScope())
 }
 
 // --- HTTP pipeline ---
+// プロキシのヘッダ復元は他のミドルウェアより前に実行する必要がある。
+app.UseForwardedHeaders();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

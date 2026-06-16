@@ -52,6 +52,55 @@ npm run dev
 # http://localhost:5173 で起動
 ```
 
+### Docker Compose（リバースプロキシ + TLS 終端）
+
+`docker compose` でリバースプロキシ（nginx）・バックエンド・フロントエンドをまとめて起動します。
+プロキシが **HTTPS(:443) を終端**し、パスでバックエンド／フロントエンドへ振り分けるため、
+すべて同一オリジン（`https://localhost`）になり CORS は不要です。HTTP(:80) は HTTPS へ自動リダイレクトします。
+
+```bash
+docker compose up --build      # ビルドして起動
+docker compose down            # 停止（DB volume は保持）
+docker compose down -v         # DB volume も含めて削除（証明書は ./proxy/certs に残る）
+```
+
+| エンドポイント | URL | 振り分け先 |
+|----------------|-----|-----------|
+| アプリ本体 | `https://localhost` | frontend（静的 SPA） |
+| API | `https://localhost/api/...` | backend |
+| Swagger UI | `https://localhost/swagger` | backend（Development のみ） |
+
+バックエンド／フロントエンドはホストへ公開せず、Docker 内部ネットワーク経由でプロキシ
+からのみ到達します。直接デバッグしたい場合は `docker-compose.yml` の各サービスの
+コメントアウトされた `ports` を有効化してください。ルーティング設定は
+`proxy/nginx.conf` にあり、編集後は `docker compose restart proxy` で反映できます。
+
+#### TLS 証明書
+
+証明書はホストの `./proxy/certs`（`.gitignore` 済み）をプロキシと共有します。
+
+- **既定（自己署名）**: `./proxy/certs` が空の場合、初回起動時にプロキシのエントリポイント
+  （`proxy/docker-entrypoint-tls.sh`）が**自己署名証明書**を自動生成します。手軽ですが
+  **ブラウザで証明書の警告**が出ます（「詳細 → 続行」で進めば動作します）。
+
+- **推奨（ブラウザ警告なし）**: [mkcert](https://github.com/FiloSottile/mkcert) で
+  「信頼される証明書」を生成します。mkcert はローカル CA を OS／ブラウザの信頼ストアへ
+  登録するため、警告が出なくなります。
+
+  ```bash
+  brew install mkcert nss          # 未インストールの場合（macOS）
+  ./proxy/setup-trusted-cert.sh    # ローカルCA登録 + localhost 証明書を ./proxy/certs に生成
+  docker compose restart proxy     # 反映
+  # → https://localhost を警告なしで開ける
+  ```
+
+  > 既に自己署名証明書が生成済みの場合は、上記スクリプトが上書きします。
+
+本番では実証明書（Let's Encrypt 等）を `./proxy/certs` に `localhost.crt` / `localhost.key`
+として配置し、`proxy/nginx.conf` の `server_name` を本番ドメインに変更してください。
+プロキシで TLS を終端し `X-Forwarded-Proto: https` を backend へ伝えるため、backend は
+自動で Cookie に `Secure` 属性を付与します（[ForwardedHeaders](#設定--セキュリティ) 参照）。
+
 ## 主な API
 
 | メソッド | パス | 説明 |
@@ -77,8 +126,9 @@ npm run dev
 
 - **JWT 署名鍵**: `backend/appsettings.Development.json` の `Jwt:Key` は**ローカル開発用のプレースホルダ**です。本番では必ず環境変数（`Jwt__Key`）などで上書きしてください。`Development` 以外の環境では、開発用の既定鍵のままや 32 文字未満の鍵だと**起動時に例外を投げて停止**します（弱い鍵での本番起動を防止）。
 - **トークンの保存先**: JWT は `localStorage` ではなく **httpOnly Cookie**（`ramensite_auth`）に保存します。JavaScript から読み取れないため XSS によるトークン窃取を防ぎ、`SameSite=Strict` で CSRF を抑止、HTTPS 時は `Secure` 属性を付与します。フロントは `fetch` で `credentials: 'include'` を付けて Cookie を送受信します。
-- **CORS**: Cookie を跨いで送受信するため、許可オリジン（`http://localhost:5173` / `5174`）に対して `AllowCredentials` を有効化しています。
-- `frontend/.env` の `VITE_API_BASE_URL` でバックエンドの URL を指定します。
+- **CORS**: ローカル開発（`run.sh` / `npm run dev`）ではフロント（`http://localhost:5173` / `5174`）とバックエンド（`:5105`）が別オリジンになるため、許可オリジンに対して `AllowCredentials` を有効化しています。Docker Compose ではリバースプロキシで同一オリジン化されるため CORS は実質不要です。
+- **リバースプロキシ**: Docker Compose ではプロキシ経由でアクセスするため、バックエンドは `ForwardedHeaders`（`X-Forwarded-For` / `X-Forwarded-Proto`）を解釈し、実クライアント IP（レート制限のキー）と HTTPS 判定（Cookie の `Secure` 属性）を復元します。
+- `frontend/.env` の `VITE_API_BASE_URL` でバックエンドの URL を指定します（ローカル開発用）。Docker ビルドでは空文字（同一オリジン相対）を焼き込みます。
 
 ### 管理者アカウント
 
