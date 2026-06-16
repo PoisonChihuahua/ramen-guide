@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -33,8 +34,22 @@ public class AuthController : ControllerBase
         _jwtSettings = jwtSettings.Value;
     }
 
-    /// <summary>ユーザー登録。成功で httpOnly Cookie にアクセス／リフレッシュトークンを設定する。</summary>
+    /// <summary>新規ユーザー登録。</summary>
+    /// <remarks>
+    /// メールアドレスを小文字に正規化してから重複チェックを行う。
+    /// 登録成功時はアクセストークン（Cookie: access_token）とリフレッシュトークン（Cookie: refresh_token）を
+    /// httpOnly Cookie に設定し、ユーザー情報をボディで返す。
+    /// </remarks>
+    /// <param name="request">登録情報（メールアドレス・パスワード・表示名）。</param>
+    /// <response code="200">登録成功。ユーザー情報を返す。認証トークンは httpOnly Cookie に設定済み。</response>
+    /// <response code="400">バリデーションエラー（メール形式不正・パスワード短すぎ等）。</response>
+    /// <response code="409">指定したメールアドレスは既に登録されている。</response>
+    /// <response code="429">レート制限超過。しばらく時間をおいて再試行してください。</response>
     [HttpPost("register")]
+    [ProducesResponseType<UserDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult<UserDto>> Register(RegisterRequest request)
     {
         var email = request.Email.Trim().ToLowerInvariant();
@@ -58,8 +73,22 @@ public class AuthController : ControllerBase
         return Ok(await IssueAuthCookiesAsync(user));
     }
 
-    /// <summary>ログイン。成功で httpOnly Cookie にアクセス／リフレッシュトークンを設定する。</summary>
+    /// <summary>ログイン。</summary>
+    /// <remarks>
+    /// 成功時はアクセストークン（Cookie: access_token）とリフレッシュトークン（Cookie: refresh_token）を
+    /// httpOnly Cookie に設定し、ユーザー情報をボディで返す。
+    /// ユーザー未存在・パスワード不一致どちらも同一のエラーメッセージを返し、存在有無を秘匿する。
+    /// </remarks>
+    /// <param name="request">ログイン情報（メールアドレス・パスワード）。</param>
+    /// <response code="200">ログイン成功。ユーザー情報を返す。認証トークンは httpOnly Cookie に設定済み。</response>
+    /// <response code="400">バリデーションエラー（メール形式不正・パスワード未入力等）。</response>
+    /// <response code="401">メールアドレスまたはパスワードが正しくない。</response>
+    /// <response code="429">レート制限超過。しばらく時間をおいて再試行してください。</response>
     [HttpPost("login")]
+    [ProducesResponseType<UserDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult<UserDto>> Login(LoginRequest request)
     {
         var email = request.Email.Trim().ToLowerInvariant();
@@ -79,11 +108,20 @@ public class AuthController : ControllerBase
         return Ok(await IssueAuthCookiesAsync(user));
     }
 
-    /// <summary>
-    /// リフレッシュトークン Cookie を使ってアクセストークンを再発行する。
+    /// <summary>アクセストークン再発行（リフレッシュトークンローテーション）。</summary>
+    /// <remarks>
+    /// Cookie: refresh_token を使ってアクセストークンを再発行する。
     /// 旧リフレッシュトークンは失効させ、新しいものを発行する（ローテーション）。
-    /// </summary>
+    /// 既に失効済みのトークンが提示された場合は盗用と判断し、当該ユーザーの全リフレッシュトークンを
+    /// 失効させてセッションを強制終了する。
+    /// </remarks>
+    /// <response code="200">再発行成功。新しいトークンペアを httpOnly Cookie に設定済み。ユーザー情報を返す。</response>
+    /// <response code="401">リフレッシュトークンが未提示・無効・失効している、または盗用が疑われる。</response>
+    /// <response code="429">レート制限超過。しばらく時間をおいて再試行してください。</response>
     [HttpPost("refresh")]
+    [ProducesResponseType<UserDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult<UserDto>> Refresh()
     {
         if (!Request.Cookies.TryGetValue(AuthCookie.RefreshName, out var raw) ||
@@ -140,8 +178,16 @@ public class AuthController : ControllerBase
         await _db.SaveChangesAsync();
     }
 
-    /// <summary>ログアウト。リフレッシュトークンを失効させ、認証 Cookie を破棄する。</summary>
+    /// <summary>ログアウト。</summary>
+    /// <remarks>
+    /// Cookie: refresh_token を DB 上で失効させ、アクセストークン Cookie とリフレッシュトークン Cookie を削除する。
+    /// リフレッシュトークン Cookie が存在しない場合や既に失効済みの場合でも成功扱いとする。
+    /// </remarks>
+    /// <response code="204">ログアウト成功。認証 Cookie を削除済み。</response>
+    /// <response code="429">レート制限超過。しばらく時間をおいて再試行してください。</response>
     [HttpPost("logout")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Logout()
     {
         if (Request.Cookies.TryGetValue(AuthCookie.RefreshName, out var raw) &&
@@ -161,9 +207,17 @@ public class AuthController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>現在ログイン中のユーザー情報。トークン検証用。</summary>
+    /// <summary>現在ログイン中のユーザー情報を取得する。</summary>
+    /// <remarks>
+    /// アクセストークン（Cookie: access_token または Authorization ヘッダ）を検証し、有効であれば
+    /// ユーザー情報を返す。フロントエンドのトークン有効性確認に利用できる。
+    /// </remarks>
+    /// <response code="200">認証済み。現在のユーザー情報を返す。</response>
+    /// <response code="401">アクセストークンが未提示・無効・期限切れ。</response>
     [Authorize]
     [HttpGet("me")]
+    [ProducesResponseType<UserDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<UserDto>> Me()
     {
         var id = User.GetUserId();
@@ -185,6 +239,7 @@ public class AuthController : ControllerBase
     /// アクセストークン（短命）とリフレッシュトークン（長命）を発行し、いずれも httpOnly Cookie に格納する。
     /// リフレッシュトークンはハッシュのみ DB に保存し、トークン本体はレスポンスボディに含めない。
     /// </summary>
+    /// <param name="user">トークンを発行するユーザー。</param>
     /// <param name="absoluteExpiresAt">
     /// トークンファミリーの絶対期限。ローテーション時は旧トークンの値を引き継ぎ延長を防ぐ。
     /// 新規ログイン／登録時は null を渡し、現在時刻から既定の絶対寿命で新たに設定する。

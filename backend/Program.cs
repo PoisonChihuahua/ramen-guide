@@ -18,7 +18,12 @@ const string FrontendCorsPolicy = "FrontendCors";
 // --- Services ---
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+    options.IncludeXmlComments(xmlPath);
+});
 
 // リバースプロキシ経由のヘッダを信頼する。プロキシが付与する X-Forwarded-For /
 // X-Forwarded-Proto を解釈し、実クライアント IP（レート制限のパーティションキー）と
