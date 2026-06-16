@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using RamenSite.Api.Data;
 using RamenSite.Api.Dtos;
 using RamenSite.Api.Models;
@@ -17,20 +18,23 @@ public class AuthController : ControllerBase
     private readonly AppDbContext _db;
     private readonly TokenService _tokenService;
     private readonly IPasswordHasher<User> _passwordHasher;
+    private readonly JwtSettings _jwtSettings;
 
     public AuthController(
         AppDbContext db,
         TokenService tokenService,
-        IPasswordHasher<User> passwordHasher)
+        IPasswordHasher<User> passwordHasher,
+        IOptions<JwtSettings> jwtSettings)
     {
         _db = db;
         _tokenService = tokenService;
         _passwordHasher = passwordHasher;
+        _jwtSettings = jwtSettings.Value;
     }
 
-    /// <summary>ユーザー登録。</summary>
+    /// <summary>ユーザー登録。成功で httpOnly Cookie に JWT を設定する。</summary>
     [HttpPost("register")]
-    public async Task<ActionResult<AuthResponse>> Register(RegisterRequest request)
+    public async Task<ActionResult<UserDto>> Register(RegisterRequest request)
     {
         var email = request.Email.Trim().ToLowerInvariant();
 
@@ -50,12 +54,12 @@ public class AuthController : ControllerBase
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
 
-        return Ok(BuildAuthResponse(user));
+        return Ok(IssueAuthCookie(user));
     }
 
-    /// <summary>ログイン。成功で JWT を返す。</summary>
+    /// <summary>ログイン。成功で httpOnly Cookie に JWT を設定する。</summary>
     [HttpPost("login")]
-    public async Task<ActionResult<AuthResponse>> Login(LoginRequest request)
+    public async Task<ActionResult<UserDto>> Login(LoginRequest request)
     {
         var email = request.Email.Trim().ToLowerInvariant();
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
@@ -71,7 +75,15 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = "メールアドレスまたはパスワードが正しくありません。" });
         }
 
-        return Ok(BuildAuthResponse(user));
+        return Ok(IssueAuthCookie(user));
+    }
+
+    /// <summary>ログアウト。認証 Cookie を破棄する。</summary>
+    [HttpPost("logout")]
+    public IActionResult Logout()
+    {
+        Response.Cookies.Delete(AuthCookie.Name, AuthCookie.BuildDeleteOptions(Request.IsHttps));
+        return NoContent();
     }
 
     /// <summary>現在ログイン中のユーザー情報。トークン検証用。</summary>
@@ -96,9 +108,12 @@ public class AuthController : ControllerBase
         return Ok(new UserDto(user.Id, user.Email, user.DisplayName));
     }
 
-    private AuthResponse BuildAuthResponse(User user)
+    /// <summary>JWT を発行し httpOnly Cookie に格納する。トークンはレスポンスボディに含めない。</summary>
+    private UserDto IssueAuthCookie(User user)
     {
         var token = _tokenService.CreateToken(user);
-        return new AuthResponse(token, new UserDto(user.Id, user.Email, user.DisplayName));
+        var expires = DateTimeOffset.UtcNow.AddMinutes(_jwtSettings.ExpiryMinutes);
+        Response.Cookies.Append(AuthCookie.Name, token, AuthCookie.BuildSetOptions(Request.IsHttps, expires));
+        return new UserDto(user.Id, user.Email, user.DisplayName);
     }
 }

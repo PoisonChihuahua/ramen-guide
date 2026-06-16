@@ -2,42 +2,36 @@ import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { AuthContext } from './auth-context';
 import type { User } from '../types';
 import * as authApi from '../api/auth';
-import { getToken, setToken, clearToken } from '../api/client';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 起動時: トークンがあれば検証して復元
+  // 起動時: httpOnly Cookie のセッションがあれば検証して復元する。
+  // トークンは JS から見えないため、認証済みかどうかは /me の成否で判定する。
   useEffect(() => {
-    if (!getToken()) {
-      setIsLoading(false);
-      return;
-    }
     authApi
       .fetchMe()
       .then(setUser)
-      .catch(() => clearToken())
+      .catch(() => setUser(null))
       .finally(() => setIsLoading(false));
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const res = await authApi.login(email, password);
-    setToken(res.token);
-    setUser(res.user);
+    const loggedInUser = await authApi.login(email, password);
+    setUser(loggedInUser);
   }, []);
 
   const register = useCallback(
     async (email: string, password: string, displayName: string) => {
-      const res = await authApi.register(email, password, displayName);
-      setToken(res.token);
-      setUser(res.user);
+      const registeredUser = await authApi.register(email, password, displayName);
+      setUser(registeredUser);
     },
     [],
   );
 
-  const logout = useCallback(() => {
-    clearToken();
+  const logout = useCallback(async () => {
+    await authApi.logout();
     setUser(null);
   }, []);
 
