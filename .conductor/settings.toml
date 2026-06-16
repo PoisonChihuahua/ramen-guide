@@ -1,0 +1,22 @@
+#:schema https://conductor.build/schemas/settings.repo.schema.json
+
+# Shared Conductor configuration for ramen-guide.
+# Two-tier app: ASP.NET Core (.NET 10) API in backend/ + React/Vite SPA in frontend/.
+
+[scripts]
+# Install frontend deps from the lockfile (npm ci = clean, deterministic) and pre-restore
+# the .NET backend + warm the npx cache for `concurrently`, so the first Run is fast and offline-safe.
+setup = "npm --prefix frontend ci && dotnet restore backend && npx --yes concurrently --version"
+
+# Start the full dev stack in one process group: API (http://localhost:5105) + Vite (http://localhost:5173).
+# Ports are fixed on purpose — backend CORS allows only 5173/5174 and the committed frontend/.env
+# pins the API at 5105 — so CONDUCTOR_PORT is intentionally not used here (would break browser CORS).
+run = 'npx --yes concurrently --kill-others-on-fail --names api,web "cd backend && dotnet run" "cd frontend && npm run dev"'
+
+# Backend port 5105, Vite port 5173, and the CORS allowlist are shared fixed resources,
+# so only one workspace can run the dev stack at a time.
+run_mode = "nonconcurrent"
+
+# Remove the workspace-local SQLite dev database before archiving.
+# These files are gitignored and recreated automatically on the next Run.
+archive = "rm -f backend/ramensite.db backend/ramensite.db-shm backend/ramensite.db-wal"
