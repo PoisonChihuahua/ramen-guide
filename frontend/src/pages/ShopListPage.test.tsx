@@ -24,6 +24,8 @@ function makeShop(id: number, name: string): Shop {
     openingHours: '11:00〜22:00',
     priceRange: '¥800〜¥1,000',
     imageUrl: 'https://example.com/x.jpg',
+    averageRating: 0,
+    reviewCount: 0,
   };
 }
 

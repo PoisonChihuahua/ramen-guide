@@ -6,7 +6,10 @@
 
 - 店舗一覧・詳細表示
 - キーワード / ジャンル / エリアによる検索・絞り込み
-- ユーザー登録・ログイン（JWT 認証の基盤）
+- ユーザー登録・ログイン（JWT を httpOnly Cookie で管理）
+- お気に入り登録（要ログイン・サーバー保存）
+- レビュー・星評価投稿（1ユーザー1店舗1件、平均評価を一覧・詳細に表示）
+- 管理画面（管理者ロールによる店舗の追加・編集・削除）
 
 ## 技術スタック
 
@@ -53,12 +56,22 @@ npm run dev
 
 | メソッド | パス | 説明 |
 |----------|------|------|
-| GET | `/api/shops?q=&genre=&area=` | 店舗一覧（検索・絞り込み） |
+| GET | `/api/shops?q=&genre=&area=` | 店舗一覧（検索・絞り込み、平均評価付き） |
 | GET | `/api/shops/{id}` | 店舗詳細 |
+| POST | `/api/shops` | 店舗の新規追加（**管理者のみ**） |
+| PUT | `/api/shops/{id}` | 店舗の更新（**管理者のみ**） |
+| DELETE | `/api/shops/{id}` | 店舗の削除（**管理者のみ**） |
 | POST | `/api/auth/register` | ユーザー登録（認証 Cookie を発行） |
 | POST | `/api/auth/login` | ログイン（認証 Cookie を発行） |
 | POST | `/api/auth/logout` | ログアウト（認証 Cookie を破棄） |
 | GET | `/api/auth/me` | ログイン中ユーザー情報（要認証） |
+| GET | `/api/shops/{id}/reviews` | 店舗のレビュー一覧 |
+| POST | `/api/shops/{id}/reviews` | レビュー投稿/更新（要認証） |
+| DELETE | `/api/shops/{id}/reviews` | 自分のレビュー削除（要認証） |
+| GET | `/api/favorites` | お気に入り店舗一覧（要認証） |
+| GET | `/api/favorites/{shopId}/status` | お気に入り状態（要認証） |
+| PUT | `/api/favorites/{shopId}` | お気に入り追加（要認証・冪等） |
+| DELETE | `/api/favorites/{shopId}` | お気に入り解除（要認証・冪等） |
 
 ## 設定 / セキュリティ
 
@@ -67,8 +80,18 @@ npm run dev
 - **CORS**: Cookie を跨いで送受信するため、許可オリジン（`http://localhost:5173` / `5174`）に対して `AllowCredentials` を有効化しています。
 - `frontend/.env` の `VITE_API_BASE_URL` でバックエンドの URL を指定します。
 
+### 管理者アカウント
+
+初回起動時に管理者ユーザーが1件シードされます（**ローカル開発用の既定値**）。
+
+| 項目 | 既定値 | 上書き用の環境変数 |
+|------|--------|--------------------|
+| メールアドレス | `admin@ramen.test` | `SEED_ADMIN_EMAIL` |
+| パスワード | `adminpass123` | `SEED_ADMIN_PASSWORD` |
+
+本番環境では必ず環境変数で資格情報を上書きしてください。管理者でログインするとヘッダーに「店舗管理」リンクが表示され、店舗の追加・編集・削除ができます。
+
 ## 今後の予定
 
-- お気に入り登録、レビュー・星評価投稿
-- 管理画面（店舗の追加・編集）
 - UI デザインの作り込み
+- レビューへの画像添付・並び替え

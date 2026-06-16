@@ -1,7 +1,9 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchShop } from '../api/shops';
-import { useFavorites } from '../hooks/useFavorites';
+import { FavoriteButton } from '../components/FavoriteButton';
+import { ReviewSection } from '../components/ReviewSection';
+import { StarRating } from '../components/StarRating';
 
 // ジャンル → プレースホルダーの出汁トーン
 const GENRE_TONE: Record<string, string> = {
@@ -26,8 +28,6 @@ export function ShopDetailPage() {
     enabled: Number.isFinite(shopId),
   });
 
-  const { isFavorite, toggleFavorite } = useFavorites();
-
   if (isLoading) return <main className="state-message">読み込み中...</main>;
   if (isError || !shop)
     return (
@@ -40,7 +40,6 @@ export function ShopDetailPage() {
     );
 
   const tone = GENRE_TONE[shop.genre] ?? 'shoyu';
-  const favorited = isFavorite(shop.id);
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
     `${shop.name} ${shop.address}`,
   )}`;
@@ -66,6 +65,15 @@ export function ShopDetailPage() {
             <span className="tag tag--area">{shop.area}</span>
           </div>
           <h1 className="detail-title">{shop.name}</h1>
+          {shop.reviewCount > 0 && (
+            <div className="detail-rating">
+              <StarRating
+                value={shop.averageRating}
+                count={shop.reviewCount}
+                size="lg"
+              />
+            </div>
+          )}
           <p className="detail-tagline">
             {shop.area}で味わう、{shop.genre}の一杯。
           </p>
@@ -93,6 +101,8 @@ export function ShopDetailPage() {
               </div>
             </div>
           </section>
+
+          <ReviewSection shopId={shop.id} />
         </div>
 
         <aside className="detail-side">
@@ -129,14 +139,7 @@ export function ShopDetailPage() {
               >
                 地図で見る
               </a>
-              <button
-                className={`info-btn info-btn--ghost${favorited ? ' info-btn--active' : ''}`}
-                type="button"
-                aria-pressed={favorited}
-                onClick={() => toggleFavorite(shop.id)}
-              >
-                {favorited ? '★ お気に入り登録済み' : '☆ お気に入りに追加'}
-              </button>
+              <FavoriteButton shopId={shop.id} />
             </div>
           </div>
         </aside>
