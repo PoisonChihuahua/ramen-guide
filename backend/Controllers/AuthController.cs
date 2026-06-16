@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using RamenSite.Api.Data;
 using RamenSite.Api.Dtos;
@@ -12,6 +13,7 @@ namespace RamenSite.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[EnableRateLimiting(RateLimitPolicies.Auth)]
 public class AuthController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -50,7 +52,7 @@ public class AuthController : ControllerBase
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
 
-        return Ok(BuildAuthResponse(user));
+        return Ok(await BuildAuthResponseAsync(user));
     }
 
     /// <summary>ログイン。成功で JWT を返す。</summary>
@@ -71,7 +73,53 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = "メールアドレスまたはパスワードが正しくありません。" });
         }
 
-        return Ok(BuildAuthResponse(user));
+        return Ok(await BuildAuthResponseAsync(user));
+    }
+
+    /// <summary>
+    /// リフレッシュトークンを使ってアクセストークンを再発行する。
+    /// 旧トークンは失効させ、新しいリフレッシュトークンを発行する（ローテーション）。
+    /// </summary>
+    [HttpPost("refresh")]
+    public async Task<ActionResult<AuthResponse>> Refresh(RefreshRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+        {
+            return Unauthorized(new { message = "リフレッシュトークンが指定されていません。" });
+        }
+
+        var hash = TokenService.HashToken(request.RefreshToken);
+        var stored = await _db.RefreshTokens
+            .Include(t => t.User)
+            .FirstOrDefaultAsync(t => t.TokenHash == hash);
+
+        if (stored is null || !stored.IsActive)
+        {
+            return Unauthorized(new { message = "リフレッシュトークンが無効または失効しています。" });
+        }
+
+        // ローテーション: 旧トークンを失効させ、新しいトークンペアを発行する。
+        stored.RevokedAt = DateTime.UtcNow;
+
+        return Ok(await BuildAuthResponseAsync(stored.User));
+    }
+
+    /// <summary>ログアウト。リフレッシュトークンを失効させる（冪等）。</summary>
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout(RefreshRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.RefreshToken))
+        {
+            var hash = TokenService.HashToken(request.RefreshToken);
+            var stored = await _db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash);
+            if (stored is not null && stored.RevokedAt is null)
+            {
+                stored.RevokedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync();
+            }
+        }
+
+        return NoContent();
     }
 
     /// <summary>現在ログイン中のユーザー情報。トークン検証用。</summary>
@@ -96,9 +144,21 @@ public class AuthController : ControllerBase
         return Ok(new UserDto(user.Id, user.Email, user.DisplayName));
     }
 
-    private AuthResponse BuildAuthResponse(User user)
+    /// <summary>アクセストークン＋リフレッシュトークンを発行し、リフレッシュトークンを永続化する。</summary>
+    private async Task<AuthResponse> BuildAuthResponseAsync(User user)
     {
-        var token = _tokenService.CreateToken(user);
-        return new AuthResponse(token, new UserDto(user.Id, user.Email, user.DisplayName));
+        var accessToken = _tokenService.CreateToken(user);
+        var (refreshToken, hash) = TokenService.CreateRefreshToken();
+
+        _db.RefreshTokens.Add(new RefreshToken
+        {
+            TokenHash = hash,
+            UserId = user.Id,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(_tokenService.RefreshTokenDays),
+        });
+        await _db.SaveChangesAsync();
+
+        return new AuthResponse(accessToken, refreshToken, new UserDto(user.Id, user.Email, user.DisplayName));
     }
 }

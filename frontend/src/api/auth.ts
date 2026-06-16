@@ -22,3 +22,17 @@ export function login(email: string, password: string): Promise<AuthResponse> {
 export function fetchMe(): Promise<User> {
   return apiFetch<User>('/api/auth/me', { auth: true });
 }
+
+export function refresh(refreshToken: string): Promise<AuthResponse> {
+  return apiFetch<AuthResponse>('/api/auth/refresh', {
+    method: 'POST',
+    body: { refreshToken },
+  });
+}
+
+export function logout(refreshToken: string): Promise<void> {
+  return apiFetch<void>('/api/auth/logout', {
+    method: 'POST',
+    body: { refreshToken },
+  });
+}

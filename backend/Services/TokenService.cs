@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -15,6 +16,9 @@ public class TokenService
     {
         _settings = settings.Value;
     }
+
+    /// <summary>リフレッシュトークンの有効日数。</summary>
+    public int RefreshTokenDays => _settings.RefreshTokenDays;
 
     public string CreateToken(User user)
     {
@@ -36,5 +40,23 @@ public class TokenService
             signingCredentials: credentials);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    /// <summary>
+    /// 暗号学的に安全なリフレッシュトークンを生成する。
+    /// 生トークン（クライアントに返す）と、その SHA-256 ハッシュ（DB 保存用）を返す。
+    /// </summary>
+    public static (string Token, string Hash) CreateRefreshToken()
+    {
+        var bytes = RandomNumberGenerator.GetBytes(32);
+        var token = Convert.ToBase64String(bytes);
+        return (token, HashToken(token));
+    }
+
+    /// <summary>生トークンを保存・照合用の SHA-256 ハッシュ（16進文字列）に変換する。</summary>
+    public static string HashToken(string token)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(token));
+        return Convert.ToHexString(hash);
     }
 }

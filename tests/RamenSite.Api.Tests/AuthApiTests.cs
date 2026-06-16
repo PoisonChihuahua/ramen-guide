@@ -133,6 +133,6 @@ public class AuthApiTests : IClassFixture<RamenApiFactory>
 }
 
 /// <summary>認証成功レスポンス（camelCase JSON）。</summary>
-public record AuthResponse(string Token, AuthUser User);
+public record AuthResponse(string Token, string RefreshToken, AuthUser User);
 
 public record AuthUser(int Id, string Email, string DisplayName);
