@@ -1,6 +1,9 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using RamenSite.Api.Data;
@@ -88,6 +91,37 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+// --- レート制限 ---
+var rateLimitSettings = builder.Configuration.GetSection(RateLimitSettings.SectionName).Get<RateLimitSettings>()
+                        ?? new RateLimitSettings();
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // IP 単位のグローバル上限。
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = rateLimitSettings.GlobalPermitLimit,
+                Window = TimeSpan.FromSeconds(rateLimitSettings.WindowSeconds),
+                QueueLimit = 0,
+            }));
+
+    // 認証エンドポイント向けの厳しめポリシー（IP 単位）。
+    options.AddPolicy(RateLimitPolicies.Auth, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = rateLimitSettings.AuthPermitLimit,
+                Window = TimeSpan.FromSeconds(rateLimitSettings.WindowSeconds),
+                QueueLimit = 0,
+            }));
+});
+
 // フロントエンド (Vite dev) からのアクセスを許可
 builder.Services.AddCors(options =>
 {
@@ -116,6 +150,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors(FrontendCorsPolicy);
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

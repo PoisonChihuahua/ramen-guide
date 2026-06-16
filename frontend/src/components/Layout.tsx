@@ -24,6 +24,9 @@ export function Layout() {
             </Link>
             {user ? (
               <>
+                <Link className="nav-link" to="/mypage">
+                  マイページ
+                </Link>
                 <span className="nav-greeting">{user.displayName} さん</span>
                 <button className="nav-link" type="button" onClick={logout}>
                   ログアウト

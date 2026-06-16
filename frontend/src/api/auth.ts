@@ -2,6 +2,7 @@ import { apiFetch } from './client';
 import type { User } from '../types';
 
 // 認証トークンは httpOnly Cookie でやり取りされるため、レスポンスボディはユーザー情報のみ。
+// アクセストークンの失効時は client.ts が /api/auth/refresh を自動的に呼び出して再発行する。
 
 export function register(
   email: string,

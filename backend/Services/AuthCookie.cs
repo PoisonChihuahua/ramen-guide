@@ -9,7 +9,11 @@ namespace RamenSite.Api.Services;
 /// </summary>
 public static class AuthCookie
 {
+    /// <summary>アクセストークン（JWT）を格納する httpOnly Cookie 名。短命。</summary>
     public const string Name = "ramensite_auth";
+
+    /// <summary>リフレッシュトークンを格納する httpOnly Cookie 名。長命で、失効・ローテーションを DB で管理する。</summary>
+    public const string RefreshName = "ramensite_refresh";
 
     /// <summary>Cookie を発行する際の属性。</summary>
     /// <param name="isHttps">リクエストが HTTPS の場合に Secure 属性を付与する。</param>
