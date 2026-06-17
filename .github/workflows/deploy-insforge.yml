@@ -100,10 +100,19 @@ jobs:
 
       - name: Deploy to InsForge Compute
         run: |
-          npx @insforge/cli compute deploy backend \
-            --name ramen-api \
-            --port 8080 \
-            --env-file backend.env.production
+          # InsForge のデプロイ API は稀に一時的な 5xx(504) を返すため最大3回リトライ。
+          for attempt in 1 2 3; do
+            echo "==> Compute デプロイ試行 $attempt/3"
+            if npx @insforge/cli compute deploy backend \
+                 --name ramen-api \
+                 --port 8080 \
+                 --env-file backend.env.production; then
+              exit 0
+            fi
+            echo "試行 $attempt 失敗。20 秒後に再試行..."
+            sleep 20
+          done
+          echo "Compute デプロイが3回とも失敗しました"; exit 1
 
       - name: Remove env file
         if: always()
@@ -131,5 +140,14 @@ jobs:
 
       - name: Deploy to InsForge Deployments
         run: |
-          npx @insforge/cli deployments deploy frontend \
-            --env "{\"VITE_API_BASE_URL\": \"${{ vars.BACKEND_PUBLIC_URL }}\"}"
+          # InsForge のデプロイ API は稀に一時的な 5xx(504) を返すため最大3回リトライ。
+          for attempt in 1 2 3; do
+            echo "==> Deployments デプロイ試行 $attempt/3"
+            if npx @insforge/cli deployments deploy frontend \
+                 --env "{\"VITE_API_BASE_URL\": \"${{ vars.BACKEND_PUBLIC_URL }}\"}"; then
+              exit 0
+            fi
+            echo "試行 $attempt 失敗。20 秒後に再試行..."
+            sleep 20
+          done
+          echo "Deployments デプロイが3回とも失敗しました"; exit 1
