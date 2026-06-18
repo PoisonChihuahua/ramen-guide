@@ -1,0 +1,60 @@
+Codemap Generation Report
+=========================
+Generated:   2026-06-16
+Scan root:   /Users/moriki.hiromasa/conductor/workspaces/ramen-guide/tallahassee
+Project:     ramen-guide (ラーメン図鑑) — 2-tier web app
+Prior maps:  none (initial baseline — diff = 100% new)
+Files scanned: 38 source files (backend .cs, frontend .ts/.tsx/.css, tests)
+
+Codemaps written (docs/CODEMAPS/)
+---------------------------------
++ architecture.md   topology, service boundaries, data + auth flow
++ backend.md        routes, middleware chain, key files, patterns
++ frontend.md       provider tree, route tree, components, state, api layer
++ data.md           Shops/Users tables, migration history, seed
++ dependencies.md   packages, external services, config/secrets, contracts
+
+Project Structure Detected
+--------------------------
+Type:       multi-package repo (backend / frontend / tests), single git repo
+Backend:    ASP.NET Core (.NET 10) Web API   — backend/   (entry: Program.cs)
+Frontend:   React 19 + Vite SPA              — frontend/  (entry: src/main.tsx)
+Tests:      xUnit integration (backend) + Vitest/RTL (frontend)
+Data store: SQLite (ramensite.db), EF Core code-first
+
+Routes (5 API endpoints)
+------------------------
+GET  /api/shops            list + filter (q/genre/area)
+GET  /api/shops/{id}       detail
+POST /api/auth/register    create user
+POST /api/auth/login       issue JWT
+GET  /api/auth/me          current user [Authorize]
+
+External Dependencies
+---------------------
+- SQLite (local file)         primary store
+- Unsplash image URLs         shop/hero photos (no SDK, plain <img>)
+- No payment / email / cache / external auth provider
+
+Architecture Notes
+------------------
+- Thin controllers, direct AppDbContext access (no repository/service layer yet).
+- DTOs (records) only across the wire; entities never exposed.
+- JWT signing key sourced from config, not hardcoded (dev key in
+  appsettings.Development.json — flagged for rotation before prod).
+- Migrations + 6-shop seed applied automatically at API startup.
+- User<->Shop relations (favorites/reviews) noted as future work in models.
+
+Staleness Warnings
+------------------
+None — baseline generation. Re-run /update-codemaps after:
+  * new API routes / controllers
+  * new entities or migrations
+  * frontend route or provider changes
+  * dependency additions
+
+Security Surface (for review, not blocking)
+-------------------------------------------
+- JWT stored in localStorage (XSS-exposed) — acceptable for current scope;
+  httpOnly cookie recommended if hardening.
+- Dev JWT key committed in appsettings.Development.json — rotate for prod.

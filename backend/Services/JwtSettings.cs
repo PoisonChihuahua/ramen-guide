@@ -11,5 +11,10 @@ public class JwtSettings
 
     public string Audience { get; set; } = string.Empty;
 
-    public int ExpiryMinutes { get; set; } = 1440; // 既定: 24時間
+    public int ExpiryMinutes { get; set; } = 15; // 既定: アクセストークンは短命（15分）
+
+    public int RefreshTokenDays { get; set; } = 7; // 既定: リフレッシュトークンは7日有効（スライド期限）
+
+    // 既定: トークンファミリーの絶対寿命は30日。ローテーションしてもこれを超えて延命しない。
+    public int RefreshTokenAbsoluteDays { get; set; } = 30;
 }

@@ -1,15 +1,22 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { ApiError } from '../api/client';
+
+interface LocationState {
+  from?: { pathname?: string };
+}
 
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const from = (location.state as LocationState | null)?.from?.pathname ?? '/';
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -17,7 +24,7 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       await login(email, password);
-      navigate('/');
+      navigate(from, { replace: true });
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : 'ログインに失敗しました。',

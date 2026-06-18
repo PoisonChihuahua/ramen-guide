@@ -114,4 +114,6 @@ public record ShopResponse(
     string Genre,
     string OpeningHours,
     string PriceRange,
-    string ImageUrl);
+    string ImageUrl,
+    double AverageRating,
+    int ReviewCount);

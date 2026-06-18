@@ -42,19 +42,21 @@ public sealed class RagSearchService
             .Take(topK)
             .ToList();
 
-        // 取得したIDの店舗本体をDBから引く（ベクトルにはIDしか持たせていない）。
+        // 取得したIDの店舗をDBから引く（ベクトルにはIDしか持たせていない）。
+        // レビュー集計（平均評価・件数）は ShopsController と同じく SQL 側で計算する。
         var ids = ranked.Select(r => r.ShopId).ToList();
-        var shops = await _db.Shops
+        var dtos = await _db.Shops
             .Where(s => ids.Contains(s.Id))
+            .Select(s => new ShopDto(
+                s.Id, s.Name, s.Description, s.Address, s.Area,
+                s.Genre, s.OpeningHours, s.PriceRange, s.ImageUrl,
+                s.Reviews.Any() ? Math.Round(s.Reviews.Average(r => r.Rating), 1) : 0,
+                s.Reviews.Count))
             .ToListAsync(cancellationToken);
 
         // ランク順を保ったまま DTO に詰める。
         var matches = ranked
-            .Select(r =>
-            {
-                var shop = shops.First(s => s.Id == r.ShopId);
-                return new ShopMatchDto(ToDto(shop), r.Score);
-            })
+            .Select(r => new ShopMatchDto(dtos.First(d => d.Id == r.ShopId), r.Score))
             .ToList();
 
         // ③ Generation: 引いた店舗「だけ」を根拠に回答を生成する。
@@ -62,8 +64,4 @@ public sealed class RagSearchService
 
         return new AskResponse(question, answer, matches);
     }
-
-    private static ShopDto ToDto(Models.Shop s) => new(
-        s.Id, s.Name, s.Description, s.Address, s.Area,
-        s.Genre, s.OpeningHours, s.PriceRange, s.ImageUrl);
 }

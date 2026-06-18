@@ -14,6 +14,8 @@ const shop: Shop = {
   openingHours: '11:00〜22:00',
   priceRange: '¥800〜¥1,200',
   imageUrl: 'https://example.com/ramen.jpg',
+  averageRating: 0,
+  reviewCount: 0,
 };
 
 function renderCard() {

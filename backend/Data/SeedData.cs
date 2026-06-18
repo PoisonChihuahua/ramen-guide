@@ -1,12 +1,15 @@
+using Microsoft.AspNetCore.Identity;
 using RamenSite.Api.Models;
 
 namespace RamenSite.Api.Data;
 
-/// <summary>初回起動時にサンプルのラーメン店データを投入する。</summary>
+/// <summary>初回起動時にサンプルのラーメン店データと管理者ユーザーを投入する。</summary>
 public static class SeedData
 {
-    public static void Initialize(AppDbContext db)
+    public static void Initialize(AppDbContext db, bool isDevelopment)
     {
+        SeedAdminUser(db, isDevelopment);
+
         if (db.Shops.Any())
         {
             return; // 既にデータがあれば何もしない
@@ -90,6 +93,77 @@ public static class SeedData
         };
 
         db.Shops.AddRange(shops);
+        db.SaveChanges();
+
+        SeedSampleReviews(db, now);
+    }
+
+    /// <summary>
+    /// 管理者ユーザーを投入する。資格情報は環境変数で上書きする。
+    /// SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD。
+    /// 本番では既定値での起動を許可せず、未設定なら例外で起動を中断する
+    /// （既定の管理者資格情報による乗っ取りを防ぐため）。開発時のみ既定値を使う。
+    /// </summary>
+    private static void SeedAdminUser(AppDbContext db, bool isDevelopment)
+    {
+        var email = (Environment.GetEnvironmentVariable("SEED_ADMIN_EMAIL")
+                     ?? "admin@ramen.test").Trim().ToLowerInvariant();
+
+        if (db.Users.Any(u => u.Email == email))
+        {
+            return;
+        }
+
+        var password = Environment.GetEnvironmentVariable("SEED_ADMIN_PASSWORD");
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            if (!isDevelopment)
+            {
+                throw new InvalidOperationException(
+                    "本番環境では SEED_ADMIN_PASSWORD（および推奨で SEED_ADMIN_EMAIL）を設定してください。" +
+                    "既定の管理者資格情報での起動は許可されていません。");
+            }
+
+            password = "adminpass123"; // ローカル開発専用の既定値
+        }
+
+        var admin = new User
+        {
+            Email = email,
+            DisplayName = "管理者",
+            Role = UserRoles.Admin,
+            CreatedAt = DateTime.UtcNow,
+        };
+        admin.PasswordHash = new PasswordHasher<User>().HashPassword(admin, password);
+
+        db.Users.Add(admin);
+        db.SaveChanges();
+    }
+
+    /// <summary>サンプルのレビューを数件投入する（管理者を投稿者として利用）。</summary>
+    private static void SeedSampleReviews(AppDbContext db, DateTime now)
+    {
+        var admin = db.Users.FirstOrDefault(u => u.Role == UserRoles.Admin);
+        if (admin is null)
+        {
+            return;
+        }
+
+        var firstShop = db.Shops.OrderBy(s => s.Id).FirstOrDefault();
+        if (firstShop is null)
+        {
+            return;
+        }
+
+        db.Reviews.Add(new Review
+        {
+            ShopId = firstShop.Id,
+            UserId = admin.Id,
+            Rating = 5,
+            Comment = "濃厚なのに最後まで飲み干せるスープ。替え玉無料も嬉しい。",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
         db.SaveChanges();
     }
 }

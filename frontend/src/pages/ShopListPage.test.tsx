@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ShopListPage } from './ShopListPage';
@@ -24,16 +25,20 @@ function makeShop(id: number, name: string): Shop {
     openingHours: '11:00〜22:00',
     priceRange: '¥800〜¥1,000',
     imageUrl: 'https://example.com/x.jpg',
+    averageRating: 0,
+    reviewCount: 0,
   };
 }
 
-function renderPage() {
+type InitialEntry = string | { pathname: string; hash?: string; search?: string };
+
+function renderPage(initialEntries?: InitialEntry[]) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={initialEntries}>
         <ShopListPage />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -75,5 +80,66 @@ describe('ShopListPage', () => {
     renderPage();
 
     expect(screen.getByText('読み込み中...')).toBeInTheDocument();
+  });
+
+  it('キーワード入力でフィルタ付きで fetchShops を呼ぶ', async () => {
+    const uev = userEvent.setup();
+    mockedFetchShops.mockResolvedValue([makeShop(1, '麺屋 いちばん')]);
+
+    renderPage();
+
+    await screen.findByText('麺屋 いちばん');
+
+    await uev.type(screen.getByLabelText('キーワード'), 'ラーメン');
+
+    await waitFor(() => {
+      expect(mockedFetchShops).toHaveBeenCalledWith(
+        expect.objectContaining({ q: 'ラーメン' }),
+      );
+    });
+  });
+
+  it('ジャンル選択でフィルタ付きで fetchShops を呼ぶ', async () => {
+    const uev = userEvent.setup();
+    mockedFetchShops.mockResolvedValue([makeShop(1, '醤油ラーメン屋')]);
+
+    renderPage();
+
+    await screen.findByText('醤油ラーメン屋');
+
+    await uev.selectOptions(
+      screen.getByRole('combobox', { name: 'ジャンルで絞り込み' }),
+      '醤油',
+    );
+
+    await waitFor(() => {
+      expect(mockedFetchShops).toHaveBeenCalledWith(
+        expect.objectContaining({ genre: '醤油' }),
+      );
+    });
+  });
+
+  describe('#search ハッシュ', () => {
+    let scrollIntoViewMock: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      scrollIntoViewMock = vi.fn();
+      window.HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
+    });
+
+    afterEach(() => {
+      // @ts-expect-error jsdom does not define scrollIntoView by default
+      delete window.HTMLElement.prototype.scrollIntoView;
+    });
+
+    it('#search ハッシュで検索バーへスクロールする', async () => {
+      mockedFetchShops.mockResolvedValue([]);
+
+      renderPage([{ pathname: '/', hash: '#search' }]);
+
+      await waitFor(() => {
+        expect(scrollIntoViewMock).toHaveBeenCalled();
+      });
+    });
   });
 });

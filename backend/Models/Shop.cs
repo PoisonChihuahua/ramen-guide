@@ -25,4 +25,8 @@ public class Shop
     public string ImageUrl { get; set; } = string.Empty;
 
     public DateTime CreatedAt { get; set; }
+
+    public ICollection<Review> Reviews { get; set; } = new List<Review>();
+
+    public ICollection<Favorite> Favorites { get; set; } = new List<Favorite>();
 }

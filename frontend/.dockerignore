@@ -1,0 +1,17 @@
+# 依存・ビルド成果物
+node_modules/
+dist/
+dist-ssr/
+
+# ローカル / ログ
+*.local
+*.log
+
+# テスト関連（イメージに不要）
+e2e/
+playwright-report/
+test-results/
+
+# Docker 関連
+Dockerfile
+.dockerignore

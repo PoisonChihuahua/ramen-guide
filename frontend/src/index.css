@@ -125,11 +125,12 @@ body { margin: 0; }
 /* ---------- 検索バー ---------- */
 .search-bar {
   display: grid;
-  grid-template-columns: 1.6fr 1fr 1fr auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
   gap: 10px;
   align-items: stretch;
 }
-.search-field { position: relative; display: flex; }
+.search-field { position: relative; display: flex; min-width: 0; }
+.search-field--input { grid-column: 1 / -1; }
 .search-input, .search-select {
   width: 100%;
   font-family: var(--font);
@@ -361,8 +362,18 @@ body { margin: 0; }
 .info-btn--primary:hover { background: var(--accent-deep); transform: translateY(-1px); }
 .info-btn--ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--line); }
 .info-btn--ghost:hover { border-color: var(--accent-tint); background: var(--accent-wash); }
+.info-btn--active { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-wash); }
+a.info-btn { text-decoration: none; }
 
 .back-link { display: inline-flex; }
+
+/* ---------- 静的ページ ---------- */
+.static-body { max-width: 720px; color: var(--ink); font-size: 15px; line-height: 1.9; }
+.static-body h3 { font-size: 17px; font-weight: 800; margin: 28px 0 10px; letter-spacing: .02em; }
+.static-body p { margin: 0 0 14px; }
+.static-body ul { margin: 0 0 14px; padding-left: 1.25em; }
+.static-body li { margin: 4px 0; }
+.static-link { color: var(--accent); font-weight: 700; }
 
 /* ---------- 認証フォーム ---------- */
 .auth-page { flex: 1; display: grid; place-items: center; padding: 50px 20px; }
@@ -379,6 +390,15 @@ body { margin: 0; }
 .auth-button:disabled { opacity: .6; cursor: default; }
 .auth-switch { text-align: center; font-size: 13.5px; color: var(--ink-soft); margin-top: 20px; }
 .auth-switch a { color: var(--accent); font-weight: 700; }
+
+/* ---------- マイページ ---------- */
+.profile-list { margin-top: 26px; display: block; }
+.profile-row { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.profile-row dt { font-size: 13px; font-weight: 700; color: var(--ink-soft); }
+.profile-row dd { font-size: 14px; color: var(--ink); text-align: right; word-break: break-all; }
+
+/* ---------- ルート読み込み ---------- */
+.route-loading { text-align: center; padding: 3rem 1rem; color: var(--ink-faint); font-size: 15px; }
 
 /* ---------- 状態メッセージ ---------- */
 .state-message { text-align: center; padding: 3rem 1rem; color: var(--ink-faint); font-size: 15px; }
@@ -403,4 +423,83 @@ body { margin: 0; }
   .section-head { flex-direction: column; align-items: flex-start; gap: 6px; }
   .detail-hero { padding: 0 18px; }
   .gallery-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* ============================================================
+   お気に入り・レビュー・管理画面（追加機能）
+   ============================================================ */
+
+/* ---------- 星評価（表示） ---------- */
+.star-rating { display: inline-flex; align-items: center; gap: 7px; }
+.star-rating__track { position: relative; display: inline-block; font-family: var(--mono); letter-spacing: 1px; line-height: 1; }
+.star-rating__base { color: var(--accent-tint); }
+.star-rating__fill { position: absolute; top: 0; left: 0; overflow: hidden; white-space: nowrap; color: var(--gold); }
+.star-rating__value { font-weight: 800; color: var(--ink); font-size: .95em; }
+.star-rating__count { font-size: .82em; color: var(--ink-faint); }
+.star-rating--sm { font-size: 13px; }
+.star-rating--md { font-size: 15px; }
+.star-rating--lg { font-size: 19px; }
+.detail-rating { margin-top: 12px; }
+.detail-rating .star-rating__value, .detail-rating .star-rating__count { color: #fff8f0; }
+.detail-rating .star-rating__base { color: rgba(255,248,240,.35); }
+.shop-card__rating { margin: 4px 0 2px; }
+
+/* ---------- 星評価（入力） ---------- */
+.star-input { display: inline-flex; gap: 4px; }
+.star-input__star { background: none; border: none; cursor: pointer; font-size: 30px; line-height: 1; padding: 0 2px; color: var(--accent-tint); transition: color .12s, transform .1s; font-family: var(--mono); }
+.star-input__star.is-active { color: var(--gold); }
+.star-input__star:hover { transform: scale(1.12); }
+
+/* ---------- お気に入りボタン ---------- */
+.info-btn--fav-on { background: var(--accent-wash); color: var(--accent-ink); border: 1.5px solid var(--accent-tint); }
+.info-btn--fav-on:hover { background: var(--accent-tint); }
+
+/* ---------- レビュー ---------- */
+.review-section { border-top: 1px solid var(--line-soft); padding-top: 30px; }
+.review-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; }
+.review-count-label { font-size: 13px; font-weight: 700; color: var(--ink-faint); }
+.review-login-prompt { background: var(--paper-2); border-radius: var(--r-md); padding: 16px 18px; font-size: 14px; color: var(--ink-soft); }
+.review-login-prompt a { color: var(--accent); font-weight: 700; }
+.review-empty { color: var(--ink-faint); font-size: 14.5px; padding: 14px 0; }
+
+.review-form { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 22px 24px; margin-bottom: 28px; box-shadow: var(--shadow-sm); }
+.review-form__title { font-weight: 800; font-size: 16px; margin-bottom: 6px; }
+.review-form__textarea { resize: vertical; line-height: 1.7; font-family: var(--font); }
+.review-form__submit { max-width: 220px; }
+
+.review-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 18px; }
+.review-item { background: var(--card); border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: 18px 20px; }
+.review-item__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.review-item__author { font-weight: 800; font-size: 15px; }
+.review-item__comment { font-size: 15px; line-height: 1.85; color: var(--ink); white-space: pre-wrap; }
+.review-item__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; font-size: 12.5px; color: var(--ink-faint); font-family: var(--mono); }
+.review-delete-btn { background: none; border: none; cursor: pointer; color: var(--accent); font-size: 12.5px; font-weight: 700; font-family: var(--font); padding: 0; }
+.review-delete-btn:hover { text-decoration: underline; }
+.review-delete-btn:disabled { opacity: .6; cursor: default; }
+
+/* ---------- 管理画面 ---------- */
+.admin-page { max-width: 1080px; margin: 0 auto; padding: 40px 40px 70px; }
+.admin-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
+.admin-new-btn { width: auto; margin-top: 0; padding: 11px 20px; font-size: 14.5px; text-decoration: none; display: inline-flex; align-items: center; }
+.admin-table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
+.admin-table th, .admin-table td { text-align: left; padding: 13px 16px; border-bottom: 1px solid var(--line-soft); font-size: 14px; }
+.admin-table th { background: var(--paper-2); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); font-family: var(--mono); }
+.admin-table tr:last-child td { border-bottom: none; }
+.admin-table__actions { text-align: right; white-space: nowrap; }
+.admin-action-link { color: var(--accent); font-weight: 700; font-size: 13.5px; background: none; border: none; cursor: pointer; font-family: var(--font); padding: 0 0 0 14px; }
+.admin-action-link:hover { text-decoration: underline; }
+.admin-action-link--danger { color: var(--accent-deep); }
+.admin-action-link:disabled { opacity: .6; cursor: default; }
+
+.admin-form-page { max-width: 640px; }
+.admin-form { background: var(--card); border-radius: var(--r-lg); box-shadow: var(--shadow-sm); padding: 28px 32px; margin-top: 18px; }
+.admin-form__actions { display: flex; align-items: center; gap: 14px; margin-top: 26px; }
+.admin-form__actions .auth-button { margin-top: 0; max-width: 200px; }
+.admin-form__actions .info-btn { width: auto; padding: 14px 22px; text-decoration: none; }
+.auth-switch-link { color: var(--accent); font-weight: 700; }
+
+@media (max-width: 700px) {
+  .admin-page { padding: 28px 18px 50px; }
+  .admin-form { padding: 22px 18px; }
+  .admin-table th:nth-child(4), .admin-table td:nth-child(4) { display: none; }
 }

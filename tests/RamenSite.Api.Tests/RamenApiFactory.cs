@@ -25,12 +25,16 @@ public class RamenApiFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
         {
-            // 既存の AppDbContext 関連登録を取り除く
+            // 既存の AppDbContext 関連登録を取り除く。
+            // EF Core 10 の AddDbContext は DbContextOptions に加えて
+            // IDbContextOptionsConfiguration<AppDbContext> も登録するため、これも除去しないと
+            // 本番側の Npgsql プロバイダ設定が残り、SQLite と二重登録になって起動に失敗する。
             var toRemove = services
                 .Where(d =>
                     d.ServiceType == typeof(DbContextOptions<AppDbContext>) ||
                     d.ServiceType == typeof(DbContextOptions) ||
-                    d.ServiceType == typeof(AppDbContext))
+                    d.ServiceType == typeof(AppDbContext) ||
+                    (d.ServiceType.FullName?.Contains("IDbContextOptionsConfiguration") ?? false))
                 .ToList();
             foreach (var descriptor in toRemove)
             {

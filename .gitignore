@@ -18,6 +18,37 @@ obj/
 *.db-shm
 *.db-wal
 appsettings.Production.json
+TestResults/
+
+# --- Frontend coverage ---
+frontend/coverage/
+
+# --- TLS 証明書（プロキシで生成 or ホスト配置した場合の保険。鍵をコミットしない） ---
+proxy/certs/
+*.crt
+*.key
+*.pem
 
 # --- Claude ---
 .claude/
+
+# --- Conductor (machine-local workspace metadata / symlinks) ---
+.conductor/
+
+# InsForge & AI agent skills
+.insforge
+.agent
+.agents
+.augment
+.claude
+.cline
+.github/copilot*
+.kilocode
+.qoder
+.qwen
+.roo
+.trae
+.windsurf
+
+# --- ローカル運用ツール（プロジェクト固有の識別子を含むため公開リポジトリに入れない） ---
+scripts/setup-github-deploy-secrets.sh

@@ -30,6 +30,8 @@ function makeResponse(): AskResponse {
           openingHours: '11:00〜22:00',
           priceRange: '1000〜1500円',
           imageUrl: 'https://example.com/x.jpg',
+          averageRating: 0,
+          reviewCount: 0,
         },
         score: 0.42,
       },

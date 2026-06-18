@@ -1,19 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5105';
 
-const TOKEN_KEY = 'ramensite_token';
-
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
-}
-
 export class ApiError extends Error {
   status: number;
 
@@ -27,34 +13,96 @@ export class ApiError extends Error {
 interface RequestOptions {
   method?: string;
   body?: unknown;
-  auth?: boolean;
+}
+
+// 自動リフレッシュの対象外（これら自体が 401 を返してもリフレッシュしない）
+const NO_REFRESH_PATHS = [
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/refresh',
+  '/api/auth/logout',
+];
+
+/**
+ * 認証セッションが失効した（リフレッシュ不能 or 再試行後も 401）ことを
+ * アプリ全体へ通知するためのイベント名。AuthProvider が購読しユーザー状態を破棄する。
+ */
+export const AUTH_EXPIRED_EVENT = 'ramensite:auth-expired';
+
+function notifyAuthExpired(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+  }
+}
+
+// 同時に複数の 401 が起きてもリフレッシュ要求は1回に集約する（single-flight）。
+let refreshPromise: Promise<boolean> | null = null;
+
+async function performRefresh(): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+function refreshSession(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = performRefresh().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
 }
 
 /**
- * 共通 fetch ラッパー。JWT 付与とエラーハンドリングを一元化する。
+ * 共通 fetch ラッパー。エラーハンドリングを一元化する。
+ * 認証は httpOnly Cookie で行うため、常に credentials: 'include' で Cookie を送受信する
+ * （JWT を JavaScript で保持しないことで XSS によるトークン窃取を防ぐ）。
+ * アクセストークン失効時（401）はリフレッシュ Cookie で一度だけ再発行を試み、再試行する。
  */
 export async function apiFetch<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const { method = 'GET', body, auth = false } = options;
+  const { method = 'GET', body } = options;
 
-  const headers: Record<string, string> = {};
-  if (body !== undefined) {
-    headers['Content-Type'] = 'application/json';
-  }
-  if (auth) {
-    const token = getToken();
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+  const sendRequest = (): Promise<Response> => {
+    const headers: Record<string, string> = {};
+    if (body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    return fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers,
+      credentials: 'include',
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  };
+
+  let response = await sendRequest();
+
+  // クエリ文字列や動的セグメントを除いた純粋なパスで判定する。
+  const pathname = path.split('?')[0];
+
+  // アクセストークンが失効していたら、一度だけリフレッシュして再試行する。
+  if (response.status === 401 && !NO_REFRESH_PATHS.includes(pathname)) {
+    const refreshed = await refreshSession();
+    if (refreshed) {
+      response = await sendRequest();
+    }
+
+    // リフレッシュ不能、または再試行後も 401 ならセッションは失効している。
+    // アプリ全体へ通知し、ログイン済み状態のままエラーが出続けるのを防ぐ。
+    if (!refreshed || response.status === 401) {
+      notifyAuthExpired();
     }
   }
-
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
 
   if (!response.ok) {
     const message = await extractErrorMessage(response);
