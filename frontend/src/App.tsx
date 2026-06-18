@@ -3,6 +3,7 @@ import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { GuestRoute } from './components/GuestRoute';
 import { ShopListPage } from './pages/ShopListPage';
+import { AskPage } from './pages/AskPage';
 import { ShopDetailPage } from './pages/ShopDetailPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
@@ -19,6 +20,7 @@ function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<ShopListPage />} />
+        <Route path="ask" element={<AskPage />} />
         <Route path="shops/:id" element={<ShopDetailPage />} />
         <Route path="about" element={<AboutPage />} />
         <Route path="contact" element={<ContactPage />} />

@@ -59,3 +59,16 @@ export interface ShopFilters {
   genre?: string;
   area?: string;
 }
+
+/** 自然文検索（RAG）で引いた店舗1件と、その類似度スコア。 */
+export interface ShopMatch {
+  shop: Shop;
+  score: number;
+}
+
+/** 自然文検索（RAG）のレスポンス。 */
+export interface AskResponse {
+  question: string;
+  answer: string;
+  matches: ShopMatch[];
+}

@@ -10,6 +10,7 @@ using Microsoft.IdentityModel.Tokens;
 using RamenSite.Api.Data;
 using RamenSite.Api.Models;
 using RamenSite.Api.Services;
+using RamenSite.Api.Services.Rag;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -50,6 +51,13 @@ builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 // JWT 設定（Options パターン）
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection(JwtSettings.SectionName));
 builder.Services.AddScoped<TokenService>();
+
+// RAG（自然文検索）。埋め込みと索引はステートレス/共有なので Singleton、
+// DB を使う検索サービスはリクエストスコープ。生成は既定でキー不要のテンプレ実装。
+builder.Services.AddSingleton<IEmbeddingService, SimpleEmbeddingService>();
+builder.Services.AddSingleton<ShopEmbeddingIndex>();
+builder.Services.AddSingleton<IAnswerGenerator, TemplateAnswerGenerator>();
+builder.Services.AddScoped<RagSearchService>();
 
 var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()
                   ?? throw new InvalidOperationException("Jwt 設定が見つかりません。");
@@ -180,6 +188,11 @@ using (var scope = app.Services.CreateScope())
     }
 
     SeedData.Initialize(db, app.Environment.IsDevelopment());
+
+    // ① Indexing: シード済みの全店舗を一度だけベクトル化してメモリ索引に載せる（RAG）。
+    var embedder = scope.ServiceProvider.GetRequiredService<IEmbeddingService>();
+    var index = scope.ServiceProvider.GetRequiredService<ShopEmbeddingIndex>();
+    index.Build(db.Shops.ToList(), embedder);
 }
 
 // --- HTTP pipeline ---
