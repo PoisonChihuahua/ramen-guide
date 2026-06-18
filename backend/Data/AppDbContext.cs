@@ -64,5 +64,25 @@ public class AppDbContext : DbContext
             .WithMany(s => s.Reviews)
             .HasForeignKey(r => r.ShopId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // RAG の埋め込みベクトルは pgvector（Postgres）専用。Npgsql のときだけモデルに載せる。
+        // 統合テストの SQLite には vector 型が無いため、ここで登録しないことで
+        // SQLite モデルに ShopEmbeddings を含めない（PgVectorStore も Npgsql 時のみ使われる）。
+        if (Database.IsNpgsql())
+        {
+            modelBuilder.HasPostgresExtension("vector");
+
+            modelBuilder.Entity<ShopEmbedding>(entity =>
+            {
+                entity.ToTable("ShopEmbeddings");
+                entity.HasKey(e => e.ShopId);
+                // SimpleEmbeddingService の出力次元(512)に一致させる。次元はモデル変更時に要更新。
+                entity.Property(e => e.Embedding).HasColumnType("vector(512)");
+                entity.HasOne<Shop>()
+                    .WithOne()
+                    .HasForeignKey<ShopEmbedding>(e => e.ShopId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+        }
     }
 }

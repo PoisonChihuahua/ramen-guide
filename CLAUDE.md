@@ -72,12 +72,17 @@ npx vitest run src/components/ShopCard.test.tsx   # 単一ファイル
 
 `POST /api/shops/ask` は埋め込みベースの RAG パイプライン。`backend/Services/Rag/` に集約:
 
-- **`IEmbeddingService` / `SimpleEmbeddingService`** — テキスト→ベクトル。簡易版は外部APIキー不要（文字n-gram + ハッシュ + L2正規化）。**差し替え口**であり、本物の意味検索には Voyage/OpenAI 等の実装に交換する
-- **`ShopEmbeddingIndex`**（Singleton）— 全店舗のベクトルをメモリ保持。`Program.cs` の起動ブロックで Seed 後に一度だけ `Build` する（①Indexing）
-- **`RagSearchService`** — 質問をベクトル化→全店コサイン類似度→上位K（②Retrieval）→生成（③）
+- **`IEmbeddingService` / `SimpleEmbeddingService`** — テキスト→ベクトル（512次元）。簡易版は外部APIキー不要（文字n-gram + ハッシュ + L2正規化）。**差し替え口**であり、本物の意味検索には Voyage/OpenAI 等の実装に交換する
+- **`IShopVectorStore`** — 索引（①Indexing）と近傍検索（②Retrieval）の抽象。DBプロバイダで実装を切り替える:
+  - **`PgVectorStore`**（本番 / Npgsql）— 埋め込みを **Postgres + pgvector** の `ShopEmbeddings`（`vector(512)`）テーブルに保存し、SQL のコサイン距離演算子 `<=>` で近傍検索する。HNSW 索引付き（`AddShopEmbeddings` マイグレーション）。`Vector` 型は `Pgvector.EntityFrameworkCore` の `UseVector()` で有効化
+  - **`InMemoryVectorStore`**（テスト / SQLite）— `ShopEmbeddingIndex`（Singleton）にベクトルを保持し全件コサイン計算。SQLite には `vector` 型が無いため、`ShopEmbedding` エンティティは `AppDbContext.OnModelCreating` で **Npgsql のときだけ** モデルに登録する
+- 起動時に `Program.cs` が `IShopVectorStore.BuildAsync` を呼び、Seed 後の全店舗を索引化する（pgvector は upsert で冪等）
+- **`RagSearchService`** — 質問をベクトル化→ストアで近傍検索（②Retrieval）→店舗DTOを引いて生成（③）
 - **`IAnswerGenerator` / `TemplateAnswerGenerator`** — 既定はキー不要のテンプレ生成。`TemplateAnswerGenerator` のコメントに Claude（Anthropic C# SDK, `claude-opus-4-8`）への差し替え手順を記載
 
-フロントは `api/rag.ts` ＋ `pages/AskPage.tsx`（`/ask` ルート）。`VectorMath`・`SimpleEmbeddingService` は単体テスト、エンドポイントは `AskApiTests` で統合テスト済み。
+埋め込み次元(512)を変える場合は `SimpleEmbeddingService.Dimension` と `OnModelCreating` の `vector(512)`、新規マイグレーションを揃える（pgvector は列の次元を後から変更できない）。
+
+フロントは `api/rag.ts` ＋ `pages/AskPage.tsx`（`/ask` ルート）。`VectorMath`・`SimpleEmbeddingService`・`InMemoryVectorStore` は単体テスト、エンドポイントは `AskApiTests`（SQLite）で統合テスト済み。pgvector 経路は実 Postgres が要るため CI 統合テスト対象外。
 
 ### 共有データモデル
 
