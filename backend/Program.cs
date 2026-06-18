@@ -41,9 +41,11 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 // 本番では InsForge マネージド Postgres の接続文字列を Compute の env/secret で渡す。
 // 統合テストはこの登録を取り除き、インメモリ SQLite に差し替える（RamenApiFactory 参照）。
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")
-                      ?? throw new InvalidOperationException(
-                          "ConnectionStrings:DefaultConnection が未設定です。環境変数で Postgres 接続文字列を設定してください。")));
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException(
+                "ConnectionStrings:DefaultConnection が未設定です。環境変数で Postgres 接続文字列を設定してください。"),
+        npgsql => npgsql.UseVector())); // RAG の埋め込みを pgvector の vector 型として扱えるようにする
 
 // パスワードハッシュ（ASP.NET Core 組み込み）
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
@@ -52,12 +54,23 @@ builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection(JwtSettings.SectionName));
 builder.Services.AddScoped<TokenService>();
 
-// RAG（自然文検索）。埋め込みと索引はステートレス/共有なので Singleton、
-// DB を使う検索サービスはリクエストスコープ。生成は既定でキー不要のテンプレ実装。
+// RAG（自然文検索）。埋め込みと生成はステートレスなので Singleton、DB を使う検索系はスコープ。
 builder.Services.AddSingleton<IEmbeddingService, SimpleEmbeddingService>();
-builder.Services.AddSingleton<ShopEmbeddingIndex>();
 builder.Services.AddSingleton<IAnswerGenerator, TemplateAnswerGenerator>();
+// SQLite フォールバック用のインメモリ索引（pgvector が無い統合テストでのみ使われる）。
+builder.Services.AddSingleton<ShopEmbeddingIndex>();
 builder.Services.AddScoped<RagSearchService>();
+
+// ベクトルストアは DB プロバイダで切り替える:
+//   Npgsql → PgVectorStore（pgvector で索引・検索）、それ以外（SQLite/テスト）→ InMemoryVectorStore。
+builder.Services.AddScoped<IShopVectorStore>(sp =>
+{
+    var db = sp.GetRequiredService<AppDbContext>();
+    var embedder = sp.GetRequiredService<IEmbeddingService>();
+    return db.Database.IsNpgsql()
+        ? new PgVectorStore(db, embedder)
+        : new InMemoryVectorStore(sp.GetRequiredService<ShopEmbeddingIndex>(), embedder);
+});
 
 var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()
                   ?? throw new InvalidOperationException("Jwt 設定が見つかりません。");
@@ -189,10 +202,10 @@ using (var scope = app.Services.CreateScope())
 
     SeedData.Initialize(db, app.Environment.IsDevelopment());
 
-    // ① Indexing: シード済みの全店舗を一度だけベクトル化してメモリ索引に載せる（RAG）。
-    var embedder = scope.ServiceProvider.GetRequiredService<IEmbeddingService>();
-    var index = scope.ServiceProvider.GetRequiredService<ShopEmbeddingIndex>();
-    index.Build(db.Shops.ToList(), embedder);
+    // ① Indexing: シード済みの全店舗をベクトル化して索引を構築する（RAG）。
+    // 本番は pgvector（DBに保存）、テストはインメモリへ。実装差は IShopVectorStore が吸収する。
+    var store = scope.ServiceProvider.GetRequiredService<IShopVectorStore>();
+    await store.BuildAsync(db.Shops.ToList(), CancellationToken.None);
 }
 
 // --- HTTP pipeline ---

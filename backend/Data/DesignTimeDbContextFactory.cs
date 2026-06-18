@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using Pgvector.EntityFrameworkCore;
 
 namespace RamenSite.Api.Data;
 
@@ -21,7 +22,7 @@ public sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<App
             ?? "Host=localhost;Port=5432;Database=insforge;Username=postgres;Password=postgres";
 
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseNpgsql(connectionString)
+            .UseNpgsql(connectionString, npgsql => npgsql.UseVector())
             .Options;
 
         return new AppDbContext(options);
