@@ -19,6 +19,9 @@ export function Layout() {
             <Link className="nav-link" to="/">
               店舗一覧
             </Link>
+            <Link className="nav-link" to="/ask">
+              AI検索
+            </Link>
             {user ? (
               <>
                 <span className="nav-greeting">{user.displayName} さん</span>
