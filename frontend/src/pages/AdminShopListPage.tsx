@@ -33,7 +33,7 @@ export function AdminShopListPage() {
         </p>
       )}
 
-      {shops && shops.length > 0 && (
+      {shops && shops.items.length > 0 && (
         <table className="admin-table">
           <thead>
             <tr>
@@ -46,7 +46,7 @@ export function AdminShopListPage() {
             </tr>
           </thead>
           <tbody>
-            {shops.map((shop) => (
+            {shops.items.map((shop) => (
               <AdminShopRow key={shop.id} shop={shop} />
             ))}
           </tbody>

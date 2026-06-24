@@ -2,6 +2,25 @@ using System.ComponentModel.DataAnnotations;
 
 namespace RamenSite.Api.Dtos;
 
+/// <summary>ページ分割された一覧レスポンス。</summary>
+/// <typeparam name="T">アイテムの型。</typeparam>
+/// <param name="Items">現在ページのアイテム一覧。</param>
+/// <param name="Total">フィルタ適用後の総件数。</param>
+/// <param name="Page">現在のページ番号（1 始まり）。</param>
+/// <param name="Limit">1 ページあたりの取得件数。</param>
+public record PagedResult<T>(
+    IReadOnlyList<T> Items,
+    int Total,
+    int Page,
+    int Limit);
+
+/// <summary>絞り込みドロップダウン用のジャンル・エリア候補。</summary>
+/// <param name="Genres">登録済みジャンルの一意リスト（昇順）。</param>
+/// <param name="Areas">登録済みエリアの一意リスト（昇順）。</param>
+public record ShopOptionsDto(
+    IReadOnlyList<string> Genres,
+    IReadOnlyList<string> Areas);
+
 /// <summary>店舗一覧・詳細のレスポンス。レビュー集計（平均評価・件数）を含む。</summary>
 /// <param name="Id">店舗 ID。</param>
 /// <param name="Name">店舗名。</param>

@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AdminShopListPage } from './AdminShopListPage';
 import { fetchShops, deleteShop } from '../api/shops';
-import type { Shop } from '../types';
+import type { Shop, PagedResult } from '../types';
 
 vi.mock('../api/shops', () => ({
   fetchShops: vi.fn(),
@@ -15,7 +15,7 @@ vi.mock('../api/shops', () => ({
 const mockedFetchShops = vi.mocked(fetchShops);
 const mockedDeleteShop = vi.mocked(deleteShop);
 
-const shops: Shop[] = [
+const shopList: Shop[] = [
   {
     id: 1,
     name: '麺屋 一',
@@ -44,6 +44,10 @@ const shops: Shop[] = [
   },
 ];
 
+function makePagedResult(shops: Shop[]): PagedResult<Shop> {
+  return { items: shops, total: shops.length, page: 1, limit: 20 };
+}
+
 function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -62,7 +66,7 @@ describe('AdminShopListPage', () => {
   });
 
   it('取得中はローディングを表示する', () => {
-    mockedFetchShops.mockReturnValue(new Promise<Shop[]>(() => {}));
+    mockedFetchShops.mockReturnValue(new Promise<PagedResult<Shop>>(() => {}));
     renderPage();
     expect(screen.getByText('読み込み中...')).toBeInTheDocument();
   });
@@ -74,7 +78,7 @@ describe('AdminShopListPage', () => {
   });
 
   it('店舗一覧をテーブルで描画する', async () => {
-    mockedFetchShops.mockResolvedValue(shops);
+    mockedFetchShops.mockResolvedValue(makePagedResult(shopList));
     renderPage();
     expect(await screen.findByText('麺屋 一')).toBeInTheDocument();
     expect(screen.getByText('麺屋 二')).toBeInTheDocument();
@@ -85,7 +89,7 @@ describe('AdminShopListPage', () => {
   it('削除確認でOKを押すと deleteShop が呼ばれる', async () => {
     const u = userEvent.setup();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    mockedFetchShops.mockResolvedValue(shops);
+    mockedFetchShops.mockResolvedValue(makePagedResult(shopList));
     mockedDeleteShop.mockResolvedValue(undefined);
     renderPage();
 
@@ -98,7 +102,7 @@ describe('AdminShopListPage', () => {
   it('削除確認でキャンセルを押すと deleteShop を呼ばない', async () => {
     const u = userEvent.setup();
     vi.spyOn(window, 'confirm').mockReturnValue(false);
-    mockedFetchShops.mockResolvedValue(shops);
+    mockedFetchShops.mockResolvedValue(makePagedResult(shopList));
     renderPage();
 
     const deleteButtons = await screen.findAllByRole('button', { name: '削除' });

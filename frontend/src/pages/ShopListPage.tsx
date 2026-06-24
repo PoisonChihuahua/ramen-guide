@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams, useLocation } from 'react-router-dom';
-import { fetchShops } from '../api/shops';
+import { fetchShops, fetchShopOptions } from '../api/shops';
 import { ShopCard } from '../components/ShopCard';
 import { SearchBar } from '../components/SearchBar';
-import type { Shop, ShopFilters } from '../types';
+import type { ShopFilters } from '../types';
 
 const HERO_IMAGE =
   'https://images.unsplash.com/photo-1557872943-16a5ac26437e?w=1600&q=80';
@@ -14,12 +14,8 @@ function paramsToFilters(params: URLSearchParams): ShopFilters {
     q: params.get('q') || undefined,
     genre: params.get('genre') || undefined,
     area: params.get('area') || undefined,
+    page: params.get('page') ? Number(params.get('page')) : undefined,
   };
-}
-
-function distinctValues(shops: Shop[] | undefined, key: 'genre' | 'area'): string[] {
-  if (!shops) return [];
-  return [...new Set(shops.map((shop) => shop[key]))].sort();
 }
 
 export function ShopListPage() {
@@ -34,11 +30,18 @@ export function ShopListPage() {
     if (next.q) params.set('q', next.q);
     if (next.genre) params.set('genre', next.genre);
     if (next.area) params.set('area', next.area);
+    // フィルタ変更時はページを 1 にリセット
+    setSearchParams(params, { replace: true });
+  }
+
+  function handlePageChange(newPage: number) {
+    const params = new URLSearchParams(searchParams);
+    params.set('page', String(newPage));
     setSearchParams(params, { replace: true });
   }
 
   const {
-    data: shops,
+    data: result,
     isLoading,
     isError,
   } = useQuery({
@@ -46,13 +49,14 @@ export function ShopListPage() {
     queryFn: () => fetchShops(filters),
   });
 
-  // 絞り込み候補は全件から算出（フィルタ結果で候補が減らないようにする）
-  const { data: allShops } = useQuery({
-    queryKey: ['shops', {}],
-    queryFn: () => fetchShops(),
+  // 絞り込み候補はフィルタとは独立して全件から取得する
+  const { data: shopOptions } = useQuery({
+    queryKey: ['shopOptions'],
+    queryFn: fetchShopOptions,
+    staleTime: Infinity,
   });
-  const genres = distinctValues(allShops, 'genre');
-  const areas = distinctValues(allShops, 'area');
+  const genres = shopOptions?.genres ?? [];
+  const areas = shopOptions?.areas ?? [];
 
   // フッターの「#search」リンクから来たら検索バーへスクロール
   useEffect(() => {
@@ -95,7 +99,7 @@ export function ShopListPage() {
             <h2 className="section-title">店舗一覧</h2>
             <p className="section-sub">All Shops</p>
           </div>
-          {shops && <p className="section-count">全 {shops.length} 店舗</p>}
+          {result && <p className="section-count">全 {result.total} 店舗</p>}
         </div>
 
         {isLoading && <p className="state-message">読み込み中...</p>}
@@ -104,17 +108,39 @@ export function ShopListPage() {
             店舗情報の取得に失敗しました。
           </p>
         )}
-        {shops && shops.length === 0 && (
+        {result && result.items.length === 0 && (
           <p className="state-message">
             条件に一致する店舗が見つかりませんでした。
           </p>
         )}
 
-        {shops && shops.length > 0 && (
+        {result && result.items.length > 0 && (
           <div className="shop-grid">
-            {shops.map((shop) => (
+            {result.items.map((shop) => (
               <ShopCard key={shop.id} shop={shop} />
             ))}
+          </div>
+        )}
+
+        {result && Math.ceil(result.total / result.limit) > 1 && (
+          <div className="pagination">
+            <button
+              className="pagination__btn"
+              disabled={result.page <= 1}
+              onClick={() => handlePageChange(result.page - 1)}
+            >
+              前へ
+            </button>
+            <span className="pagination__info">
+              {result.page} / {Math.ceil(result.total / result.limit)} ページ
+            </span>
+            <button
+              className="pagination__btn"
+              disabled={result.page >= Math.ceil(result.total / result.limit)}
+              onClick={() => handlePageChange(result.page + 1)}
+            >
+              次へ
+            </button>
           </div>
         )}
       </section>

@@ -282,6 +282,19 @@ body { margin: 0; }
 .section-sub { font-size: 13px; color: var(--ink-faint); font-family: var(--mono); letter-spacing: .12em; text-transform: uppercase; margin-top: 8px; }
 .section-count { font-size: 14px; color: var(--ink-soft); font-weight: 700; }
 
+/* ---------- ページネーション ---------- */
+.pagination { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 28px 0 0; }
+.pagination__btn {
+  font-family: var(--font); font-size: 14px; font-weight: 700;
+  color: var(--ink); background: var(--card);
+  border: 1.5px solid var(--line); border-radius: var(--r-md);
+  padding: 8px 20px; cursor: pointer;
+  transition: border-color .15s, box-shadow .15s;
+}
+.pagination__btn:hover:not(:disabled) { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
+.pagination__btn:disabled { opacity: 0.4; cursor: default; }
+.pagination__info { font-size: 14px; color: var(--ink-soft); }
+
 /* ---------- ヒーロー（大判写真＋検索バー重ね） ---------- */
 .hero {
   position: relative; min-height: 560px; overflow: hidden;

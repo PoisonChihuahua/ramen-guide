@@ -58,6 +58,20 @@ export interface ShopFilters {
   q?: string;
   genre?: string;
   area?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface PagedResult<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface ShopOptions {
+  genres: string[];
+  areas: string[];
 }
 
 /** 自然文検索（RAG）で引いた店舗1件と、その類似度スコア。 */
