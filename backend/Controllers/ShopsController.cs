@@ -20,22 +20,29 @@ public class ShopsController : ControllerBase
         _db = db;
     }
 
-    /// <summary>店舗一覧を取得する。</summary>
+    /// <summary>店舗一覧を取得する（ページネーション対応）。</summary>
     /// <remarks>
-    /// キーワード・ジャンル・エリアで絞り込みができる。絞り込みなしの場合は全件を ID 昇順で返す。
+    /// キーワード・ジャンル・エリアで絞り込みができる。結果は ID 昇順。
     /// 各店舗にはレビューの平均評価・件数を集計済みの状態で含む。
     /// </remarks>
     /// <param name="q">キーワード検索。店舗名・説明・住所に対して部分一致検索する。</param>
     /// <param name="genre">ジャンルで絞り込む（例: 「豚骨」「醤油」）。完全一致。</param>
     /// <param name="area">エリアで絞り込む（例: 「新宿」「渋谷」）。完全一致。</param>
-    /// <response code="200">店舗一覧（0件の場合は空配列）。</response>
+    /// <param name="page">取得するページ番号（1 始まり、既定 1）。</param>
+    /// <param name="limit">1 ページあたりの取得件数（1〜100、既定 20）。</param>
+    /// <response code="200">ページ分割された店舗一覧。</response>
     [HttpGet]
-    [ProducesResponseType<IEnumerable<ShopDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<IEnumerable<ShopDto>>> GetShops(
+    [ProducesResponseType<PagedResult<ShopDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<ShopDto>>> GetShops(
         [FromQuery] string? q,
         [FromQuery] string? genre,
-        [FromQuery] string? area)
+        [FromQuery] string? area,
+        [FromQuery] int page = 1,
+        [FromQuery] int limit = 20)
     {
+        page = Math.Max(1, page);
+        limit = Math.Clamp(limit, 1, 100);
+
         var query = _db.Shops.AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(q))
@@ -57,12 +64,36 @@ public class ShopsController : ControllerBase
             query = query.Where(s => s.Area == area);
         }
 
-        var shops = await query
+        var total = await query.CountAsync();
+        var items = await query
             .OrderBy(s => s.Id)
+            .Skip((page - 1) * limit)
+            .Take(limit)
             .Select(ToDto)
             .ToListAsync();
 
-        return Ok(shops);
+        return Ok(new PagedResult<ShopDto>(items, total, page, limit));
+    }
+
+    /// <summary>絞り込みドロップダウン用のジャンル・エリア候補を取得する。</summary>
+    /// <response code="200">登録済みジャンルとエリアの一意リスト。</response>
+    [HttpGet("options")]
+    [ProducesResponseType<ShopOptionsDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<ShopOptionsDto>> GetShopOptions()
+    {
+        var genres = await _db.Shops
+            .Select(s => s.Genre)
+            .Distinct()
+            .OrderBy(g => g)
+            .ToListAsync();
+
+        var areas = await _db.Shops
+            .Select(s => s.Area)
+            .Distinct()
+            .OrderBy(a => a)
+            .ToListAsync();
+
+        return Ok(new ShopOptionsDto(genres, areas));
     }
 
     /// <summary>店舗詳細を取得する。</summary>

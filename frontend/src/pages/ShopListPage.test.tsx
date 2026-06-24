@@ -4,15 +4,17 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ShopListPage } from './ShopListPage';
-import { fetchShops } from '../api/shops';
-import type { Shop } from '../types';
+import { fetchShops, fetchShopOptions } from '../api/shops';
+import type { Shop, PagedResult } from '../types';
 
 // API レイヤをモックし、ページの描画振る舞いだけを検証する
 vi.mock('../api/shops', () => ({
   fetchShops: vi.fn(),
+  fetchShopOptions: vi.fn(),
 }));
 
 const mockedFetchShops = vi.mocked(fetchShops);
+const mockedFetchShopOptions = vi.mocked(fetchShopOptions);
 
 function makeShop(id: number, name: string): Shop {
   return {
@@ -28,6 +30,10 @@ function makeShop(id: number, name: string): Shop {
     averageRating: 0,
     reviewCount: 0,
   };
+}
+
+function makePagedResult(shops: Shop[], page = 1, limit = 20): PagedResult<Shop> {
+  return { items: shops, total: shops.length, page, limit };
 }
 
 type InitialEntry = string | { pathname: string; hash?: string; search?: string };
@@ -48,13 +54,14 @@ function renderPage(initialEntries?: InitialEntry[]) {
 describe('ShopListPage', () => {
   beforeEach(() => {
     mockedFetchShops.mockReset();
+    mockedFetchShopOptions.mockReset();
+    mockedFetchShopOptions.mockResolvedValue({ genres: ['醤油', '味噌'], areas: ['東京', '札幌'] });
   });
 
   it('取得した店舗をカードとして描画する', async () => {
-    mockedFetchShops.mockResolvedValue([
-      makeShop(1, '麺屋 いちばん'),
-      makeShop(2, '麺屋 にばん'),
-    ]);
+    mockedFetchShops.mockResolvedValue(
+      makePagedResult([makeShop(1, '麺屋 いちばん'), makeShop(2, '麺屋 にばん')]),
+    );
 
     renderPage();
 
@@ -64,7 +71,7 @@ describe('ShopListPage', () => {
   });
 
   it('該当0件のとき空メッセージを表示する', async () => {
-    mockedFetchShops.mockResolvedValue([]);
+    mockedFetchShops.mockResolvedValue(makePagedResult([]));
 
     renderPage();
 
@@ -75,7 +82,7 @@ describe('ShopListPage', () => {
 
   it('取得中はローディングを表示する', () => {
     // 解決しない Promise でローディング状態を保持
-    mockedFetchShops.mockReturnValue(new Promise<Shop[]>(() => {}));
+    mockedFetchShops.mockReturnValue(new Promise<PagedResult<Shop>>(() => {}));
 
     renderPage();
 
@@ -84,7 +91,7 @@ describe('ShopListPage', () => {
 
   it('キーワード入力でフィルタ付きで fetchShops を呼ぶ', async () => {
     const uev = userEvent.setup();
-    mockedFetchShops.mockResolvedValue([makeShop(1, '麺屋 いちばん')]);
+    mockedFetchShops.mockResolvedValue(makePagedResult([makeShop(1, '麺屋 いちばん')]));
 
     renderPage();
 
@@ -101,7 +108,7 @@ describe('ShopListPage', () => {
 
   it('ジャンル選択でフィルタ付きで fetchShops を呼ぶ', async () => {
     const uev = userEvent.setup();
-    mockedFetchShops.mockResolvedValue([makeShop(1, '醤油ラーメン屋')]);
+    mockedFetchShops.mockResolvedValue(makePagedResult([makeShop(1, '醤油ラーメン屋')]));
 
     renderPage();
 
@@ -133,7 +140,7 @@ describe('ShopListPage', () => {
     });
 
     it('#search ハッシュで検索バーへスクロールする', async () => {
-      mockedFetchShops.mockResolvedValue([]);
+      mockedFetchShops.mockResolvedValue(makePagedResult([]));
 
       renderPage([{ pathname: '/', hash: '#search' }]);
 
